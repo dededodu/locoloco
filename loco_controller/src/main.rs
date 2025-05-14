@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fmt,
-    io::{self, Read, Write},
+    io::{self, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
     thread,
@@ -36,8 +36,6 @@ enum Error {
     InvalidBackendProtocolMagicNumber(u8),
     #[error("Loco {0} not connected")]
     LocoNotConnected(LocoId),
-    #[error("Error reading from TCP stream {0}")]
-    ReadTcpStream(#[source] io::Error),
     #[error("Unknown direction {0}")]
     UnknownDirection(u8),
     #[error("Unknown loco identifier {0}")]
@@ -282,11 +280,6 @@ impl Backend {
         if header.magic != BACKEND_PROTOCOL_MAGIC_NUMBER {
             return Err(Error::InvalidBackendProtocolMagicNumber(header.magic));
         }
-
-        let mut payload = vec![0u8; header.payload_len as usize];
-        stream
-            .read_exact(payload.as_mut_slice())
-            .map_err(Error::ReadTcpStream)?;
 
         let op = Operation::try_from(header.operation)?;
         debug!("Backend::handle_connection(): Operation {:?}", op);
