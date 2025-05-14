@@ -62,10 +62,10 @@ async fn main(spawner: Spawner) {
     let mut counter = 0;
     while counter < 10 {
         counter += 1;
-        log::info!("Tick {}", counter);
+        log::debug!("Tick {}", counter);
         Timer::after_secs(1).await;
     }
-    log::info!("Hello World!");
+    log::info!("Hello LocoPico!");
 
     let fw = include_bytes!("../../cyw43-firmware/43439A0.bin");
     let clm = include_bytes!("../../cyw43-firmware/43439A0_clm.bin");
@@ -117,7 +117,7 @@ async fn main(spawner: Spawner) {
         {
             Ok(_) => break,
             Err(err) => {
-                log::info!("join failed with status={}", err.status);
+                log::error!("join failed with status={}", err.status);
             }
         }
     }
@@ -329,7 +329,7 @@ struct Loco<'a> {
 
 impl<'a> Loco<'a> {
     pub fn new(pwm_ctrl: PwmController<'a>) -> Self {
-        log::info!("Loco::new()");
+        log::debug!("Loco::new()");
 
         Loco {
             direction: Direction::default(),
@@ -341,7 +341,7 @@ impl<'a> Loco<'a> {
     }
 
     fn handle_op_control_loco(&mut self, payload: &[u8]) -> Result<Option<usize>> {
-        log::info!("Loco::handle_op_control_loco()");
+        log::debug!("Loco::handle_op_control_loco()");
 
         let (ctrl_loco_payload, _): (ControlLocoPayload, usize) =
             decode_from_slice(payload, self.bincode_cfg.clone()).map_err(Error::DecodeFromSlice)?;
@@ -350,7 +350,7 @@ impl<'a> Loco<'a> {
 
         self.pwm_ctrl.control_loco(self.direction, self.speed)?;
 
-        log::info!(
+        log::debug!(
             "Loco::handle_op_control_loco(): Direction {:?}, Speed {:?}",
             self.direction,
             self.speed
@@ -360,14 +360,14 @@ impl<'a> Loco<'a> {
     }
 
     fn handle_op_loco_status(&mut self, _payload: &[u8]) -> Result<Option<usize>> {
-        log::info!("Loco::handle_op_loco_status()");
+        log::debug!("Loco::handle_op_loco_status()");
 
         let loco_st_resp = LocoStatusResponse {
             direction: self.direction.into(),
             speed: self.speed.into(),
         };
 
-        log::info!("Loco::handle_op_loco_status(): Sending {:?}", loco_st_resp);
+        log::debug!("Loco::handle_op_loco_status(): Sending {:?}", loco_st_resp);
 
         let resp_len =
             encode_into_slice(loco_st_resp, &mut self.response, self.bincode_cfg.clone())
@@ -377,7 +377,7 @@ impl<'a> Loco<'a> {
     }
 
     pub async fn send_connect_op<'b>(&self, socket: &mut TcpSocket<'b>) -> Result<()> {
-        log::info!("Loco::send_connect_op()");
+        log::debug!("Loco::send_connect_op()");
 
         let mut message = [0u8; REQUEST_MAX_SIZE];
         let payload_len = encode_into_slice(
@@ -440,7 +440,7 @@ impl<'a> Loco<'a> {
             };
 
             if let Some(resp_len) = send_response {
-                log::info!("Loco::handle_messages(): Sending response");
+                log::debug!("Loco::handle_messages(): Sending response");
                 socket
                     .write_all(&mut self.response[..resp_len])
                     .await
