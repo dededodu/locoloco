@@ -427,13 +427,13 @@ async fn http_main(port: u16, backend: Arc<Mutex<Backend>>) -> std::io::Result<(
             .service(loco_status)
             .service(control_loco)
     })
-    .bind(("127.0.0.1", port))?
+    .bind(("0.0.0.0", port))?
     .run()
     .await
 }
 
 fn backend_main(port: u16, backend: Arc<Mutex<Backend>>) -> Result<()> {
-    let listener = TcpListener::bind(("localhost", port)).map_err(Error::BindListener)?;
+    let listener = TcpListener::bind(("0.0.0.0", port)).map_err(Error::BindListener)?;
 
     loop {
         debug!("backend_main(): Waiting for incoming connection...");
