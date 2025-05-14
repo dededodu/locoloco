@@ -1,0 +1,5 @@
+# RP2350 Bootloader mode
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000f", TAG+="uaccess", MODE="660", GROUP="plugdev"
+# RP2350 USB Serial (Embassy)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="c0de", ATTRS{idProduct}=="cafe", MODE="0666"
+KERNEL=="ttyACM*", ATTRS{idVendor}=="c0de", ATTRS{idProduct}=="cafe", MODE="0666"
