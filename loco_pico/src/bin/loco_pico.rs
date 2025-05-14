@@ -4,9 +4,9 @@
 
 use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
 use bincode::error::{DecodeError, EncodeError};
-use bincode::{decode_from_slice, encode_into_slice, Decode, Encode};
+use bincode::{decode_from_slice, encode_into_slice};
 use cyw43::JoinOptions;
-use cyw43_pio::{PioSpi, DEFAULT_CLOCK_DIVIDER};
+use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
@@ -18,9 +18,13 @@ use embassy_rp::peripherals::{PIN_3, PWM_SLICE1, USB};
 use embassy_rp::pio::{InterruptHandler as PioInterruptHandler, Pio};
 use embassy_rp::pwm::{Config as PwmConfig, Pwm, PwmError, SetDutyCycle};
 use embassy_rp::usb::{Driver as UsbDriver, InterruptHandler as UsbInterruptHandler};
-use embassy_rp::{bind_interrupts, Peri};
+use embassy_rp::{Peri, bind_interrupts};
 use embassy_time::Timer;
 use embedded_io_async::{Read, ReadExactError, Write as _};
+use loco_protocol::{
+    ConnectPayload, ControlLocoPayload, Direction, Error as LocoProtocolError, Header,
+    LocoStatusResponse, Operation, Speed,
+};
 use rand::RngCore;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
@@ -179,6 +183,7 @@ async fn main(spawner: Spawner) {
 
 #[derive(Debug)]
 pub enum Error {
+    ConvertLocoProtocolType(LocoProtocolError),
     DecodeFromSlice(DecodeError),
     EncodeIntoSlice(EncodeError),
     InvalidBackendProtocolMagicNumber(u8),
@@ -202,122 +207,6 @@ const HEADER_SIZE: usize = 0x3;
 const REQUEST_MAX_SIZE: usize = HEADER_SIZE + PAYLOAD_MAX_SIZE;
 const RESPONSE_MAX_SIZE: usize = 1024;
 const LOCO_ID: u8 = 0x1;
-
-#[derive(Encode, Decode, Copy, Clone, Debug)]
-struct Header {
-    magic: u8,
-    operation: u8,
-    payload_len: u8,
-}
-
-#[derive(Decode, Copy, Clone, Debug)]
-struct ControlLocoPayload {
-    direction: u8,
-    speed: u8,
-}
-
-#[derive(Encode, Copy, Clone, Debug)]
-struct LocoStatusResponse {
-    direction: u8,
-    speed: u8,
-}
-
-#[derive(Copy, Clone, Debug, Default)]
-enum Direction {
-    #[default]
-    Forward,
-    Backward,
-}
-
-impl TryFrom<u8> for Direction {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        Ok(match value {
-            1 => Direction::Forward,
-            2 => Direction::Backward,
-            _ => return Err(Error::UnknownDirection(value)),
-        })
-    }
-}
-
-impl Into<u8> for Direction {
-    fn into(self) -> u8 {
-        match self {
-            Direction::Forward => 1,
-            Direction::Backward => 2,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Default)]
-enum Speed {
-    #[default]
-    Stop,
-    Slow,
-    Normal,
-    Fast,
-}
-
-impl TryFrom<u8> for Speed {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        Ok(match value {
-            0 => Speed::Stop,
-            1 => Speed::Slow,
-            2 => Speed::Normal,
-            3 => Speed::Fast,
-            _ => return Err(Error::UnknownSpeed(value)),
-        })
-    }
-}
-
-impl Into<u8> for Speed {
-    fn into(self) -> u8 {
-        match self {
-            Speed::Stop => 0,
-            Speed::Slow => 1,
-            Speed::Normal => 2,
-            Speed::Fast => 3,
-        }
-    }
-}
-
-#[derive(Encode, Decode, Copy, Clone, Debug)]
-pub enum Operation {
-    Connect,
-    ControlLoco,
-    LocoStatus,
-}
-
-impl TryFrom<u8> for Operation {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        Ok(match value {
-            1 => Operation::Connect,
-            2 => Operation::ControlLoco,
-            3 => Operation::LocoStatus,
-            _ => return Err(Error::UnknownOperation(value)),
-        })
-    }
-}
-
-impl Into<u8> for Operation {
-    fn into(self) -> u8 {
-        match self {
-            Operation::Connect => 1,
-            Operation::ControlLoco => 2,
-            Operation::LocoStatus => 3,
-        }
-    }
-}
-
-#[derive(Encode, Copy, Clone, Debug)]
-struct ConnectPayload {
-    loco_id: u8,
-}
 
 struct Loco<'a> {
     direction: Direction,
@@ -345,8 +234,14 @@ impl<'a> Loco<'a> {
 
         let (ctrl_loco_payload, _): (ControlLocoPayload, usize) =
             decode_from_slice(payload, self.bincode_cfg.clone()).map_err(Error::DecodeFromSlice)?;
-        self.direction = ctrl_loco_payload.direction.try_into()?;
-        self.speed = ctrl_loco_payload.speed.try_into()?;
+        self.direction = ctrl_loco_payload
+            .direction
+            .try_into()
+            .map_err(Error::ConvertLocoProtocolType)?;
+        self.speed = ctrl_loco_payload
+            .speed
+            .try_into()
+            .map_err(Error::ConvertLocoProtocolType)?;
 
         self.pwm_ctrl.control_loco(self.direction, self.speed)?;
 
@@ -424,7 +319,8 @@ impl<'a> Loco<'a> {
                 return Err(Error::InvalidBackendProtocolMagicNumber(header.magic));
             }
 
-            let op = Operation::try_from(header.operation)?;
+            let op =
+                Operation::try_from(header.operation).map_err(Error::ConvertLocoProtocolType)?;
             log::info!("Loco::handle_messages(): Operation {:?}", op);
 
             let mut payload_buf = [0u8; PAYLOAD_MAX_SIZE];
