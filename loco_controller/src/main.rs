@@ -2,17 +2,18 @@ use actix_web::{
     App, HttpResponse, HttpServer, Responder, body::BoxBody, get, http::StatusCode, post, web,
 };
 use bincode::{
-    Decode, Encode,
     config::{Configuration, Fixint, LittleEndian, NoLimit},
     decode_from_std_read, encode_to_vec,
     error::{DecodeError, EncodeError},
 };
 use clap::Parser;
+use loco_protocol::{
+    ConnectPayload, ControlLoco, ControlLocoPayload, Direction, Error as LocoProtocolError, Header,
+    LocoId, LocoStatus, LocoStatusResponse, Operation, Speed,
+};
 use log::{debug, error};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    fmt,
     io::{self, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
@@ -26,6 +27,8 @@ const BACKEND_PROTOCOL_MAGIC_NUMBER: u8 = 0xab;
 enum Error {
     #[error("Error binding listener {0}")]
     BindListener(#[source] io::Error),
+    #[error("Error converting into expected type")]
+    ConvertLocoProtocolType(LocoProtocolError),
     #[error("Error decoding from TCP stream: {0}")]
     DecodeFromStream(#[source] DecodeError),
     #[error("Error encoding to vec: {0}")]
@@ -36,14 +39,6 @@ enum Error {
     InvalidBackendProtocolMagicNumber(u8),
     #[error("Loco {0} not connected")]
     LocoNotConnected(LocoId),
-    #[error("Unknown direction {0}")]
-    UnknownDirection(u8),
-    #[error("Unknown loco identifier {0}")]
-    UnknownLocoId(u8),
-    #[error("Unknown operation {0}")]
-    UnknownOperation(u8),
-    #[error("Unknown speed {0}")]
-    UnknownSpeed(u8),
     #[error("Unsupported operation {0}")]
     UnsupportedOperation(Operation),
     #[error("Error writing to TCP stream {0}")]
@@ -51,186 +46,6 @@ enum Error {
 }
 
 type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
-enum LocoId {
-    Loco1,
-    Loco2,
-}
-
-impl TryFrom<u8> for LocoId {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        Ok(match value {
-            1 => LocoId::Loco1,
-            2 => LocoId::Loco2,
-            _ => return Err(Error::UnknownLocoId(value)),
-        })
-    }
-}
-
-impl Into<u8> for LocoId {
-    fn into(self) -> u8 {
-        match self {
-            LocoId::Loco1 => 1,
-            LocoId::Loco2 => 2,
-        }
-    }
-}
-
-impl fmt::Display for LocoId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let id = match *self {
-            LocoId::Loco1 => "Loco1",
-            LocoId::Loco2 => "Loco2",
-        };
-        write!(f, "{}", id)
-    }
-}
-
-#[derive(Copy, Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-enum Direction {
-    #[default]
-    Forward,
-    Backward,
-}
-
-impl TryFrom<u8> for Direction {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        Ok(match value {
-            1 => Direction::Forward,
-            2 => Direction::Backward,
-            _ => return Err(Error::UnknownDirection(value)),
-        })
-    }
-}
-
-impl Into<u8> for Direction {
-    fn into(self) -> u8 {
-        match self {
-            Direction::Forward => 1,
-            Direction::Backward => 2,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-enum Speed {
-    #[default]
-    Stop,
-    Slow,
-    Normal,
-    Fast,
-}
-
-impl TryFrom<u8> for Speed {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        Ok(match value {
-            0 => Speed::Stop,
-            1 => Speed::Slow,
-            2 => Speed::Normal,
-            3 => Speed::Fast,
-            _ => return Err(Error::UnknownSpeed(value)),
-        })
-    }
-}
-
-impl Into<u8> for Speed {
-    fn into(self) -> u8 {
-        match self {
-            Speed::Stop => 0,
-            Speed::Slow => 1,
-            Speed::Normal => 2,
-            Speed::Fast => 3,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Deserialize)]
-struct ControlLoco {
-    loco_id: LocoId,
-    direction: Direction,
-    speed: Speed,
-}
-
-#[derive(Decode, Copy, Clone, Debug)]
-enum Operation {
-    Connect,
-    ControlLoco,
-    LocoStatus,
-}
-
-impl TryFrom<u8> for Operation {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        Ok(match value {
-            1 => Operation::Connect,
-            2 => Operation::ControlLoco,
-            3 => Operation::LocoStatus,
-            _ => return Err(Error::UnknownOperation(value)),
-        })
-    }
-}
-
-impl Into<u8> for Operation {
-    fn into(self) -> u8 {
-        match self {
-            Operation::Connect => 1,
-            Operation::ControlLoco => 2,
-            Operation::LocoStatus => 3,
-        }
-    }
-}
-
-impl fmt::Display for Operation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let op = match *self {
-            Operation::Connect => "Connect",
-            Operation::ControlLoco => "ControlLoco",
-            Operation::LocoStatus => "LocoStatus",
-        };
-        write!(f, "{}", op)
-    }
-}
-
-#[derive(Decode, Copy, Clone, Debug)]
-struct ConnectPayload {
-    loco_id: u8,
-}
-
-#[derive(Encode, Copy, Clone, Debug)]
-struct ControlLocoPayload {
-    direction: u8,
-    speed: u8,
-}
-
-#[derive(Decode, Copy, Clone, Debug)]
-struct LocoStatusResponse {
-    direction: u8,
-    speed: u8,
-}
-
-#[derive(Encode, Decode, Copy, Clone, Debug)]
-struct Header {
-    magic: u8,
-    operation: u8,
-    payload_len: u8,
-}
-
-#[derive(Serialize)]
-struct LocoStatus {
-    direction: Direction,
-    speed: Speed,
-}
 
 struct LocoInfo {
     stream: TcpStream,
@@ -260,7 +75,7 @@ impl Backend {
         // Retrieve payload
         let payload: ConnectPayload = decode_from_std_read(&mut stream, self.bincode_cfg.clone())
             .map_err(Error::DecodeFromStream)?;
-        let loco_id = LocoId::try_from(payload.loco_id)?;
+        let loco_id = LocoId::try_from(payload.loco_id).map_err(Error::ConvertLocoProtocolType)?;
         debug!("Backend::handle_op_connect(): LocoId {:?}", loco_id);
 
         self.loco_info.insert(loco_id, LocoInfo { stream });
@@ -281,7 +96,7 @@ impl Backend {
             return Err(Error::InvalidBackendProtocolMagicNumber(header.magic));
         }
 
-        let op = Operation::try_from(header.operation)?;
+        let op = Operation::try_from(header.operation).map_err(Error::ConvertLocoProtocolType)?;
         debug!("Backend::handle_connection(): Operation {:?}", op);
 
         match op {
@@ -362,8 +177,9 @@ impl Backend {
                 .map_err(Error::DecodeFromStream)?;
 
         let status = LocoStatus {
-            direction: Direction::try_from(resp.direction)?,
-            speed: Speed::try_from(resp.speed)?,
+            direction: Direction::try_from(resp.direction)
+                .map_err(Error::ConvertLocoProtocolType)?,
+            speed: Speed::try_from(resp.speed).map_err(Error::ConvertLocoProtocolType)?,
         };
 
         Ok(status)
