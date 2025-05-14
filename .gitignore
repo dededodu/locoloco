@@ -1,2 +1,4 @@
 loco_controller/Cargo.lock
 loco_controller/target
+loco_pico/Cargo.lock
+loco_pico/target

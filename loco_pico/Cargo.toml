@@ -1,0 +1,37 @@
+[package]
+name = "loco_pico"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "loco_pico"
+test = false
+bench = false
+
+[dependencies]
+bincode = { version = "2.0", default-features = false, features = ["derive"] }
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt = "0.7.0"
+critical-section = "1.1"
+cyw43 = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "firmware-logs"] }
+cyw43-pio = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt"] }
+defmt = "0.3"
+defmt-rtt = "0.4"
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
+embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns"] }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-usb-logger = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840" }
+embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
+log = "0.4"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+rand = { version = "0.8.5", default-features = false }
+static_cell = "2.1"
+
+[profile.release]
+debug = 2
+
+[profile.dev]
+lto = true
+opt-level = "z"
