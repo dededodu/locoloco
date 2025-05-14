@@ -385,7 +385,7 @@ async fn loco_status(
     match data.lock().unwrap().loco_status(loco_id) {
         Ok(status) => HttpResponse::Ok().json(status),
         Err(e) => {
-            error!("{}\n", e);
+            error!("{}", e);
             return HttpResponse::with_body(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 BoxBody::new(format!("{}", e)),
@@ -404,7 +404,7 @@ async fn control_loco(
         .unwrap()
         .control_loco(form.loco_id, form.direction, form.speed)
     {
-        error!("{}\n", e);
+        error!("{}", e);
         return HttpResponse::with_body(
             StatusCode::INTERNAL_SERVER_ERROR,
             BoxBody::new(format!("{}", e)),
@@ -438,9 +438,9 @@ fn backend_main(port: u16, backend: Arc<Mutex<Backend>>) -> Result<()> {
     loop {
         debug!("backend_main(): Waiting for incoming connection...");
         let (stream, _) = listener.accept().map_err(Error::BindListener)?;
-        debug!("main(): Connected\n");
+        debug!("main(): Connected");
         if let Err(e) = backend.lock().unwrap().handle_connection(stream) {
-            error!("{}\n", e);
+            error!("{}", e);
         }
     }
 }
