@@ -35,9 +35,9 @@ impl TryFrom<u8> for LocoId {
     }
 }
 
-impl Into<u8> for LocoId {
-    fn into(self) -> u8 {
-        match self {
+impl From<LocoId> for u8 {
+    fn from(item: LocoId) -> Self {
+        match item {
             LocoId::Loco1 => 1,
             LocoId::Loco2 => 2,
         }
@@ -74,9 +74,9 @@ impl TryFrom<u8> for Direction {
     }
 }
 
-impl Into<u8> for Direction {
-    fn into(self) -> u8 {
-        match self {
+impl From<Direction> for u8 {
+    fn from(item: Direction) -> Self {
+        match item {
             Direction::Forward => 1,
             Direction::Backward => 2,
         }
@@ -107,9 +107,9 @@ impl TryFrom<u8> for Speed {
     }
 }
 
-impl Into<u8> for Speed {
-    fn into(self) -> u8 {
-        match self {
+impl From<Speed> for u8 {
+    fn from(item: Speed) -> Self {
+        match item {
             Speed::Stop => 0,
             Speed::Slow => 1,
             Speed::Normal => 2,
@@ -145,9 +145,9 @@ impl TryFrom<u8> for Operation {
     }
 }
 
-impl Into<u8> for Operation {
-    fn into(self) -> u8 {
-        match self {
+impl From<Operation> for u8 {
+    fn from(item: Operation) -> Self {
+        match item {
             Operation::Connect => 1,
             Operation::ControlLoco => 2,
             Operation::LocoStatus => 3,
