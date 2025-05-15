@@ -233,7 +233,7 @@ impl<'a> Loco<'a> {
         log::debug!("Loco::handle_op_control_loco()");
 
         let (ctrl_loco_payload, _): (ControlLocoPayload, usize) =
-            decode_from_slice(payload, self.bincode_cfg.clone()).map_err(Error::DecodeFromSlice)?;
+            decode_from_slice(payload, self.bincode_cfg).map_err(Error::DecodeFromSlice)?;
         self.direction = ctrl_loco_payload
             .direction
             .try_into()
@@ -264,21 +264,20 @@ impl<'a> Loco<'a> {
 
         log::debug!("Loco::handle_op_loco_status(): Sending {:?}", loco_st_resp);
 
-        let resp_len =
-            encode_into_slice(loco_st_resp, &mut self.response, self.bincode_cfg.clone())
-                .map_err(Error::EncodeIntoSlice)?;
+        let resp_len = encode_into_slice(loco_st_resp, &mut self.response, self.bincode_cfg)
+            .map_err(Error::EncodeIntoSlice)?;
 
         Ok(Some(resp_len))
     }
 
-    pub async fn send_connect_op<'b>(&self, socket: &mut TcpSocket<'b>) -> Result<()> {
+    pub async fn send_connect_op(&self, socket: &mut TcpSocket<'_>) -> Result<()> {
         log::debug!("Loco::send_connect_op()");
 
         let mut message = [0u8; REQUEST_MAX_SIZE];
         let payload_len = encode_into_slice(
             ConnectPayload { loco_id: LOCO_ID },
             &mut message[HEADER_SIZE..],
-            self.bincode_cfg.clone(),
+            self.bincode_cfg,
         )
         .map_err(Error::EncodeIntoSlice)?;
 
@@ -289,7 +288,7 @@ impl<'a> Loco<'a> {
                 payload_len: payload_len as u8,
             },
             &mut message[..HEADER_SIZE],
-            self.bincode_cfg.clone(),
+            self.bincode_cfg,
         )
         .map_err(Error::EncodeIntoSlice)?;
 
@@ -305,15 +304,15 @@ impl<'a> Loco<'a> {
         Ok(())
     }
 
-    pub async fn handle_messages<'b>(&mut self, socket: &mut TcpSocket<'b>) -> Result<()> {
+    pub async fn handle_messages(&mut self, socket: &mut TcpSocket<'_>) -> Result<()> {
         loop {
             log::info!("Loco::handle_messages(): Waiting for incoming bytes...");
 
             let mut hdr = [0; HEADER_SIZE];
             socket.read_exact(&mut hdr).await.map_err(Error::TcpRead)?;
 
-            let (header, _): (Header, usize) = decode_from_slice(&hdr, self.bincode_cfg.clone())
-                .map_err(Error::DecodeFromSlice)?;
+            let (header, _): (Header, usize) =
+                decode_from_slice(&hdr, self.bincode_cfg).map_err(Error::DecodeFromSlice)?;
 
             if header.magic != BACKEND_PROTOCOL_MAGIC_NUMBER {
                 return Err(Error::InvalidBackendProtocolMagicNumber(header.magic));
@@ -325,7 +324,7 @@ impl<'a> Loco<'a> {
 
             let mut payload_buf = [0u8; PAYLOAD_MAX_SIZE];
             let payload = &mut payload_buf[..header.payload_len as usize];
-            if payload.len() > 0 {
+            if !payload.is_empty() {
                 socket.read_exact(payload).await.map_err(Error::TcpRead)?;
             }
 
@@ -338,7 +337,7 @@ impl<'a> Loco<'a> {
             if let Some(resp_len) = send_response {
                 log::debug!("Loco::handle_messages(): Sending response");
                 socket
-                    .write_all(&mut self.response[..resp_len])
+                    .write_all(&self.response[..resp_len])
                     .await
                     .map_err(Error::TcpWrite)?;
             }
@@ -360,7 +359,7 @@ struct PwmController<'a> {
     pwm_backward: Pwm<'a>,
 }
 
-impl<'a> PwmController<'a> {
+impl PwmController<'_> {
     pub fn new(
         slice0: Peri<'static, PWM_SLICE0>,
         pin0: Peri<'static, PIN_0>,
