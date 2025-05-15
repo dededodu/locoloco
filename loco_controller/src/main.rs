@@ -73,8 +73,8 @@ impl Backend {
         debug!("Backend::handle_op_connect()");
 
         // Retrieve payload
-        let payload: ConnectPayload = decode_from_std_read(&mut stream, self.bincode_cfg.clone())
-            .map_err(Error::DecodeFromStream)?;
+        let payload: ConnectPayload =
+            decode_from_std_read(&mut stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?;
         let loco_id = LocoId::try_from(payload.loco_id).map_err(Error::ConvertLocoProtocolType)?;
         debug!("Backend::handle_op_connect(): LocoId {:?}", loco_id);
 
@@ -87,8 +87,8 @@ impl Backend {
         debug!("Backend::handle_connection()");
 
         // Retrieve header
-        let header: Header = decode_from_std_read(&mut stream, self.bincode_cfg.clone())
-            .map_err(Error::DecodeFromStream)?;
+        let header: Header =
+            decode_from_std_read(&mut stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?;
 
         debug!("Backend::handle_connection(): {:?}", header);
 
@@ -125,7 +125,7 @@ impl Backend {
                 direction: direction.into(),
                 speed: speed.into(),
             },
-            self.bincode_cfg.clone(),
+            self.bincode_cfg,
         )
         .map_err(Error::EncodeToVec)?;
 
@@ -135,7 +135,7 @@ impl Backend {
                 operation: Operation::ControlLoco.into(),
                 payload_len: payload.len() as u8,
             },
-            self.bincode_cfg.clone(),
+            self.bincode_cfg,
         )
         .map_err(Error::EncodeToVec)?;
 
@@ -163,7 +163,7 @@ impl Backend {
                 operation: Operation::LocoStatus.into(),
                 payload_len: 0,
             },
-            self.bincode_cfg.clone(),
+            self.bincode_cfg,
         )
         .map_err(Error::EncodeToVec)?;
 
@@ -173,7 +173,7 @@ impl Backend {
             .map_err(Error::WriteTcpStream)?;
 
         let resp: LocoStatusResponse =
-            decode_from_std_read(&mut loco_info.stream, self.bincode_cfg.clone())
+            decode_from_std_read(&mut loco_info.stream, self.bincode_cfg)
                 .map_err(Error::DecodeFromStream)?;
 
         let status = LocoStatus {
@@ -202,10 +202,10 @@ async fn loco_status(
         Ok(status) => HttpResponse::Ok().json(status),
         Err(e) => {
             error!("{}", e);
-            return HttpResponse::with_body(
+            HttpResponse::with_body(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 BoxBody::new(format!("{}", e)),
-            );
+            )
         }
     }
 }
