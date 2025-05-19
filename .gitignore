@@ -4,3 +4,5 @@ loco_pico/Cargo.lock
 loco_pico/target
 loco_protocol/Cargo.lock
 loco_protocol/target
+sensors_pico/Cargo.lock
+sensors_pico/target
