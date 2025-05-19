@@ -22,7 +22,7 @@ without the need for `sudo` privileges, and also to make the board show up
 as `/dev/ttyACM*` while running. This allows for easier debugging.
 
 ```
-sudo cp udev/99-rp-pico2w.rules /etc/udev/rules.d/
+sudo cp udev_rules/99-rp-pico2w.rules /etc/udev/rules.d/
 ```
 
 ## Loco Controller
