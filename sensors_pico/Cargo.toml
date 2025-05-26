@@ -9,6 +9,11 @@ name = "detect_tag_uid"
 test = false
 bench = false
 
+[[bin]]
+name = "sensors_pico"
+test = false
+bench = false
+
 [dependencies]
 bincode = { version = "2.0", default-features = false }
 cortex-m = { version = "0.7.6", features = ["inline-asm"] }
