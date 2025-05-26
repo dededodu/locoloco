@@ -1,10 +1,3 @@
-// USE MODIFIED mfrc522 crate
-//
-// // - Set the reload value to determine the timeout
-// //   for a 5ms timeout, we need a value of 200 = 0xC8
-// self.write(Register::TReloadRegHigh, 0x00)?;
-// self.write(Register::TReloadRegLow, 0xC8)?;
-
 #![no_std]
 #![no_main]
 
@@ -52,6 +45,7 @@ async fn main(spawner: Spawner) {
     let mut rfid_reader = Mfrc522::new(spi_if)
         .init()
         .expect("could not create MFRC522");
+    rfid_reader.set_receive_timeout(5).unwrap();
     rfid_reader.set_antenna_gain(RxGain::DB48).unwrap();
 
     let mut counter = 0;
