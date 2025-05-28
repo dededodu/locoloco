@@ -101,7 +101,7 @@ impl Backend {
 
         match op {
             Operation::Connect => self.handle_op_connect(stream)?,
-            Operation::ControlLoco | Operation::LocoStatus => {
+            Operation::ControlLoco | Operation::LocoStatus | Operation::SensorsStatus => {
                 return Err(Error::UnsupportedOperation(op));
             }
         }

@@ -10,6 +10,7 @@ pub enum Error {
     UnknownDirection(u8),
     UnknownLocoId(u8),
     UnknownOperation(u8),
+    UnknownSensorId(u8),
     UnknownSpeed(u8),
     UnsupportedOperation(Operation),
 }
@@ -49,6 +50,48 @@ impl fmt::Display for LocoId {
         let id = match *self {
             LocoId::Loco1 => "Loco1",
             LocoId::Loco2 => "Loco2",
+        };
+        write!(f, "{}", id)
+    }
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SensorId {
+    RfidReader1,
+    RfidReader2,
+    RfidReader3,
+}
+
+impl TryFrom<u8> for SensorId {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Ok(match value {
+            1 => SensorId::RfidReader1,
+            2 => SensorId::RfidReader2,
+            3 => SensorId::RfidReader3,
+            _ => return Err(Error::UnknownSensorId(value)),
+        })
+    }
+}
+
+impl From<SensorId> for u8 {
+    fn from(item: SensorId) -> Self {
+        match item {
+            SensorId::RfidReader1 => 1,
+            SensorId::RfidReader2 => 2,
+            SensorId::RfidReader3 => 3,
+        }
+    }
+}
+
+impl fmt::Display for SensorId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let id = match *self {
+            SensorId::RfidReader1 => "Checkpoint1",
+            SensorId::RfidReader2 => "Checkpoint2",
+            SensorId::RfidReader3 => "Checkpoint3",
         };
         write!(f, "{}", id)
     }
@@ -130,6 +173,7 @@ pub enum Operation {
     Connect,
     ControlLoco,
     LocoStatus,
+    SensorsStatus,
 }
 
 impl TryFrom<u8> for Operation {
@@ -151,6 +195,7 @@ impl From<Operation> for u8 {
             Operation::Connect => 1,
             Operation::ControlLoco => 2,
             Operation::LocoStatus => 3,
+            Operation::SensorsStatus => 4,
         }
     }
 }
@@ -161,6 +206,7 @@ impl fmt::Display for Operation {
             Operation::Connect => "Connect",
             Operation::ControlLoco => "ControlLoco",
             Operation::LocoStatus => "LocoStatus",
+            Operation::SensorsStatus => "SensorsStatus",
         };
         write!(f, "{}", op)
     }
@@ -175,6 +221,17 @@ pub struct ConnectPayload {
 pub struct ControlLocoPayload {
     pub direction: u8,
     pub speed: u8,
+}
+
+#[derive(Encode, Decode, Copy, Clone, Debug)]
+pub struct SensorsStatusArray {
+    pub len: u8,
+}
+
+#[derive(Encode, Decode, Copy, Clone, Debug)]
+pub struct SensorStatus {
+    pub sensor_id: u8,
+    pub loco_id: u8,
 }
 
 #[derive(Encode, Decode, Copy, Clone, Debug)]
