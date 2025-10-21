@@ -73,6 +73,25 @@ impl Backend {
         }
     }
 
+    fn retrieve_header_op(&self, stream: &mut TcpStream) -> Result<Operation> {
+        debug!("Backend::retrieve_header_op()");
+
+        // Retrieve header
+        let header: Header =
+            decode_from_std_read(stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?;
+
+        debug!("Backend::retrieve_header_op(): {:?}", header);
+
+        if header.magic != BACKEND_PROTOCOL_MAGIC_NUMBER {
+            return Err(Error::InvalidBackendProtocolMagicNumber(header.magic));
+        }
+
+        let op = Operation::try_from(header.operation).map_err(Error::ConvertLocoProtocolType)?;
+        debug!("Backend::retrieve_header_op(): Operation {:?}", op);
+
+        Ok(op)
+    }
+
     fn handle_op_connect(&self, mut stream: TcpStream) -> Result<()> {
         debug!("Backend::handle_op_connect()");
 
@@ -90,18 +109,7 @@ impl Backend {
     fn handle_connection(&self, mut stream: TcpStream) -> Result<()> {
         debug!("Backend::handle_connection()");
 
-        // Retrieve header
-        let header: Header =
-            decode_from_std_read(&mut stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?;
-
-        debug!("Backend::handle_connection(): {:?}", header);
-
-        if header.magic != BACKEND_PROTOCOL_MAGIC_NUMBER {
-            return Err(Error::InvalidBackendProtocolMagicNumber(header.magic));
-        }
-
-        let op = Operation::try_from(header.operation).map_err(Error::ConvertLocoProtocolType)?;
-        debug!("Backend::handle_connection(): Operation {:?}", op);
+        let op = self.retrieve_header_op(&mut stream)?;
 
         match op {
             Operation::Connect => self.handle_op_connect(stream)?,
