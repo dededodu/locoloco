@@ -7,11 +7,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum Error {
+    UidTooLong,
     UnknownDirection(u8),
     UnknownLocoId(u8),
     UnknownOperation(u8),
     UnknownSensorId(u8),
     UnknownSpeed(u8),
+    UnknownUid,
     UnsupportedOperation(Operation),
 }
 
@@ -32,6 +34,21 @@ impl TryFrom<u8> for LocoId {
             1 => LocoId::Loco1,
             2 => LocoId::Loco2,
             _ => return Err(Error::UnknownLocoId(value)),
+        })
+    }
+}
+
+impl TryFrom<&[u8]> for LocoId {
+    type Error = Error;
+
+    fn try_from(uid: &[u8]) -> Result<Self> {
+        if uid.len() != 4 {
+            return Err(Error::UidTooLong);
+        }
+        Ok(match uid {
+            [0xe3, 0xa6, 0xaf, 0x05] => LocoId::Loco1,
+            [0xf1, 0x65, 0xb2, 0x01] => LocoId::Loco2,
+            _ => return Err(Error::UnknownUid),
         })
     }
 }
