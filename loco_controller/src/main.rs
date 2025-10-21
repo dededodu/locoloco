@@ -47,13 +47,14 @@ enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Default)]
 struct LocoInfo {
-    stream: TcpStream,
+    stream: Option<TcpStream>,
 }
 
 struct Backend {
     bincode_cfg: Configuration<LittleEndian, Fixint, NoLimit>,
-    loco_info: HashMap<LocoId, LocoInfo>,
+    loco_info: HashMap<LocoId, Mutex<LocoInfo>>,
 }
 
 impl Backend {
@@ -61,7 +62,10 @@ impl Backend {
         debug!("Backend::new()");
 
         let bincode_cfg = bincode::config::legacy();
-        let loco_info = HashMap::new();
+        let loco_info = HashMap::from([
+            (LocoId::Loco1, Mutex::new(LocoInfo::default())),
+            (LocoId::Loco2, Mutex::new(LocoInfo::default())),
+        ]);
 
         Backend {
             bincode_cfg,
@@ -69,7 +73,7 @@ impl Backend {
         }
     }
 
-    fn handle_op_connect(&mut self, mut stream: TcpStream) -> Result<()> {
+    fn handle_op_connect(&self, mut stream: TcpStream) -> Result<()> {
         debug!("Backend::handle_op_connect()");
 
         // Retrieve payload
@@ -78,12 +82,12 @@ impl Backend {
         let loco_id = LocoId::try_from(payload.loco_id).map_err(Error::ConvertLocoProtocolType)?;
         debug!("Backend::handle_op_connect(): LocoId {:?}", loco_id);
 
-        self.loco_info.insert(loco_id, LocoInfo { stream });
+        self.loco_info.get(&loco_id).unwrap().lock().unwrap().stream = Some(stream);
 
         Ok(())
     }
 
-    fn handle_connection(&mut self, mut stream: TcpStream) -> Result<()> {
+    fn handle_connection(&self, mut stream: TcpStream) -> Result<()> {
         debug!("Backend::handle_connection()");
 
         // Retrieve header
@@ -109,16 +113,11 @@ impl Backend {
         Ok(())
     }
 
-    fn control_loco(&mut self, loco_id: LocoId, direction: Direction, speed: Speed) -> Result<()> {
+    fn control_loco(&self, loco_id: LocoId, direction: Direction, speed: Speed) -> Result<()> {
         debug!(
             "Backend::control_loco(): loco_id {:?}, direction {:?}, speed {:?}",
             loco_id, direction, speed
         );
-
-        let loco_info = self
-            .loco_info
-            .get_mut(&loco_id)
-            .ok_or(Error::LocoNotConnected(loco_id))?;
 
         let mut payload = encode_to_vec(
             ControlLocoPayload {
@@ -141,21 +140,22 @@ impl Backend {
 
         message.append(&mut payload);
 
-        loco_info
+        self.loco_info
+            .get(&loco_id)
+            .unwrap()
+            .lock()
+            .unwrap()
             .stream
+            .as_mut()
+            .ok_or(Error::LocoNotConnected(loco_id))?
             .write_all(message.as_slice())
             .map_err(Error::WriteTcpStream)?;
 
         Ok(())
     }
 
-    fn loco_status(&mut self, loco_id: LocoId) -> Result<LocoStatus> {
+    fn loco_status(&self, loco_id: LocoId) -> Result<LocoStatus> {
         debug!("Backend::loco_status(): loco_id {:?}", loco_id);
-
-        let loco_info = self
-            .loco_info
-            .get_mut(&loco_id)
-            .ok_or(Error::LocoNotConnected(loco_id))?;
 
         let message = encode_to_vec(
             Header {
@@ -167,14 +167,20 @@ impl Backend {
         )
         .map_err(Error::EncodeToVec)?;
 
-        loco_info
-            .stream
-            .write_all(message.as_slice())
-            .map_err(Error::WriteTcpStream)?;
+        let resp: LocoStatusResponse = {
+            let mut loco_info = self.loco_info.get(&loco_id).unwrap().lock().unwrap();
 
-        let resp: LocoStatusResponse =
-            decode_from_std_read(&mut loco_info.stream, self.bincode_cfg)
-                .map_err(Error::DecodeFromStream)?;
+            let stream = loco_info
+                .stream
+                .as_mut()
+                .ok_or(Error::LocoNotConnected(loco_id))?;
+
+            stream
+                .write_all(message.as_slice())
+                .map_err(Error::WriteTcpStream)?;
+
+            decode_from_std_read(stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?
+        };
 
         let status = LocoStatus {
             direction: Direction::try_from(resp.direction)
@@ -187,18 +193,15 @@ impl Backend {
 }
 
 #[get("/")]
-async fn index(_data: web::Data<Arc<Mutex<Backend>>>) -> impl Responder {
+async fn index(_data: web::Data<Arc<Backend>>) -> impl Responder {
     HttpResponse::Ok().body("Loco controller running!")
 }
 
 #[get("/loco_status/{loco_id}")]
-async fn loco_status(
-    path: web::Path<LocoId>,
-    data: web::Data<Arc<Mutex<Backend>>>,
-) -> impl Responder {
+async fn loco_status(path: web::Path<LocoId>, data: web::Data<Arc<Backend>>) -> impl Responder {
     let loco_id = path.into_inner();
 
-    match data.lock().unwrap().loco_status(loco_id) {
+    match data.loco_status(loco_id) {
         Ok(status) => HttpResponse::Ok().json(status),
         Err(e) => {
             error!("{}", e);
@@ -213,13 +216,9 @@ async fn loco_status(
 #[post("/control_loco")]
 async fn control_loco(
     form: web::Json<ControlLoco>,
-    data: web::Data<Arc<Mutex<Backend>>>,
+    data: web::Data<Arc<Backend>>,
 ) -> impl Responder {
-    if let Err(e) = data
-        .lock()
-        .unwrap()
-        .control_loco(form.loco_id, form.direction, form.speed)
-    {
+    if let Err(e) = data.control_loco(form.loco_id, form.direction, form.speed) {
         error!("{}", e);
         return HttpResponse::with_body(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -234,7 +233,7 @@ async fn control_loco(
 }
 
 #[actix_web::main]
-async fn http_main(port: u16, backend: Arc<Mutex<Backend>>) -> std::io::Result<()> {
+async fn http_main(port: u16, backend: Arc<Backend>) -> std::io::Result<()> {
     debug!("http_main(): Waiting for incoming connection...");
     HttpServer::new(move || {
         App::new()
@@ -248,14 +247,14 @@ async fn http_main(port: u16, backend: Arc<Mutex<Backend>>) -> std::io::Result<(
     .await
 }
 
-fn backend_locos(port: u16, backend: Arc<Mutex<Backend>>) -> Result<()> {
+fn backend_locos(port: u16, backend: Arc<Backend>) -> Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port)).map_err(Error::BindListener)?;
 
     loop {
         debug!("backend_locos(): Waiting for incoming connection...");
         let (stream, _) = listener.accept().map_err(Error::BindListener)?;
-        debug!("main(): Connected");
-        if let Err(e) = backend.lock().unwrap().handle_connection(stream) {
+        debug!("backend_locos(): Connected");
+        if let Err(e) = backend.handle_connection(stream) {
             error!("{}", e);
         }
     }
@@ -276,13 +275,13 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize backend
-    let backend = Arc::new(Mutex::new(Backend::new()));
+    let backend = Arc::new(Backend::new());
     let shared_backend = backend.clone();
 
     // Start backend server, waiting for incoming connections from locos
-    thread::spawn(move || backend_locos(args.backend_locos_port, backend));
+    thread::spawn(move || backend_locos(args.backend_locos_port, shared_backend));
 
-    http_main(args.http_port, shared_backend).map_err(Error::HttpServer)?;
+    http_main(args.http_port, backend).map_err(Error::HttpServer)?;
 
     Ok(())
 }
