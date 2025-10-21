@@ -248,11 +248,11 @@ async fn http_main(port: u16, backend: Arc<Mutex<Backend>>) -> std::io::Result<(
     .await
 }
 
-fn backend_main(port: u16, backend: Arc<Mutex<Backend>>) -> Result<()> {
+fn backend_locos(port: u16, backend: Arc<Mutex<Backend>>) -> Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port)).map_err(Error::BindListener)?;
 
     loop {
-        debug!("backend_main(): Waiting for incoming connection...");
+        debug!("backend_locos(): Waiting for incoming connection...");
         let (stream, _) = listener.accept().map_err(Error::BindListener)?;
         debug!("main(): Connected");
         if let Err(e) = backend.lock().unwrap().handle_connection(stream) {
@@ -267,7 +267,7 @@ struct Args {
     #[arg(long, default_value_t = 8080)]
     http_port: u16,
     #[arg(long, default_value_t = 8004)]
-    backend_port: u16,
+    backend_locos_port: u16,
 }
 
 fn main() -> Result<()> {
@@ -280,7 +280,7 @@ fn main() -> Result<()> {
     let shared_backend = backend.clone();
 
     // Start backend server, waiting for incoming connections from locos
-    thread::spawn(move || backend_main(args.backend_port, backend));
+    thread::spawn(move || backend_locos(args.backend_locos_port, backend));
 
     http_main(args.http_port, shared_backend).map_err(Error::HttpServer)?;
 
