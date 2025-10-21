@@ -269,4 +269,5 @@ pub struct Header {
 pub struct LocoStatus {
     pub direction: Direction,
     pub speed: Speed,
+    pub location: Option<SensorId>,
 }

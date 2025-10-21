@@ -9,7 +9,8 @@ use bincode::{
 use clap::Parser;
 use loco_protocol::{
     ConnectPayload, ControlLoco, ControlLocoPayload, Direction, Error as LocoProtocolError, Header,
-    LocoId, LocoStatus, LocoStatusResponse, Operation, Speed,
+    LocoId, LocoStatus, LocoStatusResponse, Operation, SensorId, SensorStatus, SensorsStatusArray,
+    Speed,
 };
 use log::{debug, error};
 use std::{
@@ -50,6 +51,7 @@ type Result<T> = std::result::Result<T, Error>;
 #[derive(Default)]
 struct LocoInfo {
     stream: Option<TcpStream>,
+    position: Option<SensorId>,
 }
 
 struct Backend {
@@ -194,9 +196,65 @@ impl Backend {
             direction: Direction::try_from(resp.direction)
                 .map_err(Error::ConvertLocoProtocolType)?,
             speed: Speed::try_from(resp.speed).map_err(Error::ConvertLocoProtocolType)?,
+            location: self
+                .loco_info
+                .get(&loco_id)
+                .unwrap()
+                .lock()
+                .unwrap()
+                .position,
         };
 
         Ok(status)
+    }
+
+    fn handle_op_sensors_status(&self, stream: &mut TcpStream) -> Result<()> {
+        debug!("Backend::handle_op_sensors_status()");
+
+        // Retrieve number of sensors being updated
+        let sensors_status_array: SensorsStatusArray =
+            decode_from_std_read(stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?;
+
+        for _ in 0..sensors_status_array.len {
+            let sensor_status: SensorStatus =
+                decode_from_std_read(stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?;
+            let loco_id =
+                LocoId::try_from(sensor_status.loco_id).map_err(Error::ConvertLocoProtocolType)?;
+            let sensor_id = SensorId::try_from(sensor_status.sensor_id)
+                .map_err(Error::ConvertLocoProtocolType)?;
+            debug!(
+                "Backend::handle_op_sensors_status(): {} detected at {}",
+                loco_id, sensor_id
+            );
+            self.loco_info
+                .get(&loco_id)
+                .unwrap()
+                .lock()
+                .unwrap()
+                .position = Some(sensor_id);
+        }
+
+        debug!(
+            "Backend::handle_op_sensors_status(): {} sensors updated",
+            sensors_status_array.len
+        );
+
+        Ok(())
+    }
+
+    fn serve_sensors(&self, mut stream: TcpStream) -> Result<()> {
+        debug!("Backend::serve_sensors()");
+
+        loop {
+            let op = self.retrieve_header_op(&mut stream)?;
+
+            match op {
+                Operation::SensorsStatus => self.handle_op_sensors_status(&mut stream)?,
+                Operation::Connect | Operation::ControlLoco | Operation::LocoStatus => {
+                    return Err(Error::UnsupportedOperation(op));
+                }
+            }
+        }
     }
 }
 
@@ -268,6 +326,19 @@ fn backend_locos(port: u16, backend: Arc<Backend>) -> Result<()> {
     }
 }
 
+fn backend_sensors(port: u16, backend: Arc<Backend>) -> Result<()> {
+    let listener = TcpListener::bind(("0.0.0.0", port)).map_err(Error::BindListener)?;
+
+    loop {
+        debug!("backend_sensors(): Waiting for incoming connection...");
+        let (stream, _) = listener.accept().map_err(Error::BindListener)?;
+        debug!("backend_sensors(): Connected");
+        if let Err(e) = backend.serve_sensors(stream) {
+            error!("{}", e);
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -275,6 +346,8 @@ struct Args {
     http_port: u16,
     #[arg(long, default_value_t = 8004)]
     backend_locos_port: u16,
+    #[arg(long, default_value_t = 8005)]
+    backend_sensors_port: u16,
 }
 
 fn main() -> Result<()> {
@@ -284,10 +357,14 @@ fn main() -> Result<()> {
 
     // Initialize backend
     let backend = Arc::new(Backend::new());
-    let shared_backend = backend.clone();
+    let shared_backend_locos = backend.clone();
+    let shared_backend_sensors = backend.clone();
 
     // Start backend server, waiting for incoming connections from locos
-    thread::spawn(move || backend_locos(args.backend_locos_port, shared_backend));
+    thread::spawn(move || backend_locos(args.backend_locos_port, shared_backend_locos));
+
+    // Start backend server, waiting for updates on locos' positions
+    thread::spawn(move || backend_sensors(args.backend_sensors_port, shared_backend_sensors));
 
     http_main(args.http_port, backend).map_err(Error::HttpServer)?;
 
