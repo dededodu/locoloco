@@ -37,7 +37,7 @@ cargo build --target aarch64-unknown-linux-gnu
 
 Run the controller as follows:
 ```
-./loco_controller --http-port 8080 --backend-port 8004
+./loco_controller --http-port 8080 --backend-locos-port 8004
 ```
 
 ### HTTP requests
