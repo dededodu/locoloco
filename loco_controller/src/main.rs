@@ -8,9 +8,9 @@ use bincode::{
 };
 use clap::Parser;
 use loco_protocol::{
-    ConnectPayload, ControlLoco, ControlLocoPayload, Direction, Error as LocoProtocolError, Header,
-    LocoId, LocoStatus, LocoStatusResponse, Operation, SensorId, SensorStatus, SensorsStatusArray,
-    Speed,
+    ActuatorId, ActuatorType, ConnectPayload, ControlLoco, ControlLocoPayload, Direction,
+    DriveActuatorPayload, DriveSwitchRails, Error as LocoProtocolError, Header, LocoId, LocoStatus,
+    LocoStatusResponse, Operation, SensorId, SensorStatus, SensorsStatusArray, Speed,
 };
 use log::{debug, error};
 use std::{
@@ -26,6 +26,8 @@ const BACKEND_PROTOCOL_MAGIC_NUMBER: u8 = 0xab;
 
 #[derive(Debug, Error)]
 enum Error {
+    #[error("Actuators not connected")]
+    ActuatorsNotConnected,
     #[error("Error binding listener {0}")]
     BindListener(#[source] io::Error),
     #[error("Error converting into expected type")]
@@ -54,9 +56,15 @@ struct LocoInfo {
     position: Option<SensorId>,
 }
 
+#[derive(Default)]
+struct ActuatorInfo {
+    stream: Option<TcpStream>,
+}
+
 struct Backend {
     bincode_cfg: Configuration<LittleEndian, Fixint, NoLimit>,
     loco_info: HashMap<LocoId, Mutex<LocoInfo>>,
+    actuator_info: Mutex<ActuatorInfo>,
 }
 
 impl Backend {
@@ -68,10 +76,12 @@ impl Backend {
             (LocoId::Loco1, Mutex::new(LocoInfo::default())),
             (LocoId::Loco2, Mutex::new(LocoInfo::default())),
         ]);
+        let actuator_info = Mutex::new(ActuatorInfo::default());
 
         Backend {
             bincode_cfg,
             loco_info,
+            actuator_info,
         }
     }
 
@@ -108,14 +118,17 @@ impl Backend {
         Ok(())
     }
 
-    fn handle_connection(&self, mut stream: TcpStream) -> Result<()> {
+    fn handle_loco_connection(&self, mut stream: TcpStream) -> Result<()> {
         debug!("Backend::handle_connection()");
 
         let op = self.retrieve_header_op(&mut stream)?;
 
         match op {
             Operation::Connect => self.handle_op_connect(stream)?,
-            Operation::ControlLoco | Operation::LocoStatus | Operation::SensorsStatus => {
+            Operation::ControlLoco
+            | Operation::LocoStatus
+            | Operation::SensorsStatus
+            | Operation::DriveActuator => {
                 return Err(Error::UnsupportedOperation(op));
             }
         }
@@ -208,6 +221,51 @@ impl Backend {
         Ok(status)
     }
 
+    fn drive_actuator(
+        &self,
+        actuator_id: ActuatorId,
+        actuator_type: ActuatorType,
+        actuator_state: u8,
+    ) -> Result<()> {
+        debug!(
+            "Backend::drive_switch_rails(): actuator_id {:?}, actuator_type {:?}, state {}",
+            actuator_id, actuator_type, actuator_state
+        );
+
+        let mut payload = encode_to_vec(
+            DriveActuatorPayload {
+                actuator_id: actuator_id.into(),
+                actuator_type: actuator_type.into(),
+                actuator_state,
+            },
+            self.bincode_cfg,
+        )
+        .map_err(Error::EncodeToVec)?;
+
+        let mut message = encode_to_vec(
+            Header {
+                magic: BACKEND_PROTOCOL_MAGIC_NUMBER,
+                operation: Operation::DriveActuator.into(),
+                payload_len: payload.len() as u8,
+            },
+            self.bincode_cfg,
+        )
+        .map_err(Error::EncodeToVec)?;
+
+        message.append(&mut payload);
+
+        self.actuator_info
+            .lock()
+            .unwrap()
+            .stream
+            .as_mut()
+            .ok_or(Error::ActuatorsNotConnected)?
+            .write_all(message.as_slice())
+            .map_err(Error::WriteTcpStream)?;
+
+        Ok(())
+    }
+
     fn handle_op_sensors_status(&self, stream: &mut TcpStream) -> Result<()> {
         debug!("Backend::handle_op_sensors_status()");
 
@@ -250,11 +308,22 @@ impl Backend {
 
             match op {
                 Operation::SensorsStatus => self.handle_op_sensors_status(&mut stream)?,
-                Operation::Connect | Operation::ControlLoco | Operation::LocoStatus => {
+                Operation::Connect
+                | Operation::ControlLoco
+                | Operation::LocoStatus
+                | Operation::DriveActuator => {
                     return Err(Error::UnsupportedOperation(op));
                 }
             }
         }
+    }
+
+    fn handle_actuators_connection(&self, stream: TcpStream) -> Result<()> {
+        debug!("Backend::handle_actuators_connection()");
+
+        self.actuator_info.lock().unwrap().stream = Some(stream);
+
+        Ok(())
     }
 }
 
@@ -298,6 +367,26 @@ async fn control_loco(
     ))
 }
 
+#[post("/drive_switch_rails")]
+async fn drive_switch_rails(
+    form: web::Json<DriveSwitchRails>,
+    data: web::Data<Arc<Backend>>,
+) -> impl Responder {
+    if let Err(e) = data.drive_actuator(
+        form.actuator_id,
+        ActuatorType::SwitchRails,
+        form.state.into(),
+    ) {
+        error!("{}", e);
+        return HttpResponse::with_body(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            BoxBody::new(format!("{}", e)),
+        );
+    }
+
+    HttpResponse::Ok().body(format!("Drive {:?} to {:?}", form.actuator_id, form.state))
+}
+
 #[actix_web::main]
 async fn http_main(port: u16, backend: Arc<Backend>) -> std::io::Result<()> {
     debug!("http_main(): Waiting for incoming connection...");
@@ -307,6 +396,7 @@ async fn http_main(port: u16, backend: Arc<Backend>) -> std::io::Result<()> {
             .service(index)
             .service(loco_status)
             .service(control_loco)
+            .service(drive_switch_rails)
     })
     .bind(("0.0.0.0", port))?
     .run()
@@ -320,7 +410,7 @@ fn backend_locos(port: u16, backend: Arc<Backend>) -> Result<()> {
         debug!("backend_locos(): Waiting for incoming connection...");
         let (stream, _) = listener.accept().map_err(Error::BindListener)?;
         debug!("backend_locos(): Connected");
-        if let Err(e) = backend.handle_connection(stream) {
+        if let Err(e) = backend.handle_loco_connection(stream) {
             error!("{}", e);
         }
     }
@@ -339,6 +429,19 @@ fn backend_sensors(port: u16, backend: Arc<Backend>) -> Result<()> {
     }
 }
 
+fn backend_actuators(port: u16, backend: Arc<Backend>) -> Result<()> {
+    let listener = TcpListener::bind(("0.0.0.0", port)).map_err(Error::BindListener)?;
+
+    loop {
+        debug!("backend_actuators(): Waiting for incoming connection...");
+        let (stream, _) = listener.accept().map_err(Error::BindListener)?;
+        debug!("backend_actuators(): Connected");
+        if let Err(e) = backend.handle_actuators_connection(stream) {
+            error!("{}", e);
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -348,6 +451,8 @@ struct Args {
     backend_locos_port: u16,
     #[arg(long, default_value_t = 8005)]
     backend_sensors_port: u16,
+    #[arg(long, default_value_t = 8006)]
+    backend_actuators_port: u16,
 }
 
 fn main() -> Result<()> {
@@ -359,12 +464,16 @@ fn main() -> Result<()> {
     let backend = Arc::new(Backend::new());
     let shared_backend_locos = backend.clone();
     let shared_backend_sensors = backend.clone();
+    let shared_backend_actuators = backend.clone();
 
     // Start backend server, waiting for incoming connections from locos
     thread::spawn(move || backend_locos(args.backend_locos_port, shared_backend_locos));
 
     // Start backend server, waiting for updates on locos' positions
     thread::spawn(move || backend_sensors(args.backend_sensors_port, shared_backend_sensors));
+
+    // Start backend server, waiting for incoming connection from actuators
+    thread::spawn(move || backend_actuators(args.backend_actuators_port, shared_backend_actuators));
 
     http_main(args.http_port, backend).map_err(Error::HttpServer)?;
 

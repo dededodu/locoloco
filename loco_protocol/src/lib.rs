@@ -8,11 +8,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug)]
 pub enum Error {
     UidTooLong,
+    UnknownActuatorId(u8),
+    UnknownActuatorType(u8),
     UnknownDirection(u8),
     UnknownLocoId(u8),
     UnknownOperation(u8),
     UnknownSensorId(u8),
     UnknownSpeed(u8),
+    UnknownSwitchRailsState(u8),
     UnknownUid,
     UnsupportedOperation(Operation),
 }
@@ -114,6 +117,142 @@ impl fmt::Display for SensorId {
     }
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ActuatorId {
+    SwitchRails1,
+    SwitchRails2,
+    SwitchRails3,
+    SwitchRails4,
+    SwitchRails5,
+    SwitchRails6,
+    SwitchRails7,
+    SwitchRails8,
+}
+
+impl TryFrom<u8> for ActuatorId {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Ok(match value {
+            1 => ActuatorId::SwitchRails1,
+            2 => ActuatorId::SwitchRails2,
+            3 => ActuatorId::SwitchRails3,
+            4 => ActuatorId::SwitchRails4,
+            5 => ActuatorId::SwitchRails5,
+            6 => ActuatorId::SwitchRails6,
+            7 => ActuatorId::SwitchRails7,
+            8 => ActuatorId::SwitchRails8,
+            _ => return Err(Error::UnknownActuatorId(value)),
+        })
+    }
+}
+
+impl From<ActuatorId> for u8 {
+    fn from(item: ActuatorId) -> Self {
+        match item {
+            ActuatorId::SwitchRails1 => 1,
+            ActuatorId::SwitchRails2 => 2,
+            ActuatorId::SwitchRails3 => 3,
+            ActuatorId::SwitchRails4 => 4,
+            ActuatorId::SwitchRails5 => 5,
+            ActuatorId::SwitchRails6 => 6,
+            ActuatorId::SwitchRails7 => 7,
+            ActuatorId::SwitchRails8 => 8,
+        }
+    }
+}
+
+impl fmt::Display for ActuatorId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let id = match *self {
+            ActuatorId::SwitchRails1 => "SwitchRails1",
+            ActuatorId::SwitchRails2 => "SwitchRails2",
+            ActuatorId::SwitchRails3 => "SwitchRails3",
+            ActuatorId::SwitchRails4 => "SwitchRails4",
+            ActuatorId::SwitchRails5 => "SwitchRails5",
+            ActuatorId::SwitchRails6 => "SwitchRails6",
+            ActuatorId::SwitchRails7 => "SwitchRails7",
+            ActuatorId::SwitchRails8 => "SwitchRails8",
+        };
+        write!(f, "{}", id)
+    }
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ActuatorType {
+    #[default]
+    SwitchRails,
+}
+
+impl TryFrom<u8> for ActuatorType {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Ok(match value {
+            1 => ActuatorType::SwitchRails,
+            _ => return Err(Error::UnknownActuatorType(value)),
+        })
+    }
+}
+
+impl From<ActuatorType> for u8 {
+    fn from(item: ActuatorType) -> Self {
+        match item {
+            ActuatorType::SwitchRails => 1,
+        }
+    }
+}
+
+impl fmt::Display for ActuatorType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let id = match *self {
+            ActuatorType::SwitchRails => "SwitchRails",
+        };
+        write!(f, "{}", id)
+    }
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SwitchRailsState {
+    #[default]
+    Direct,
+    Diverted,
+}
+
+impl TryFrom<u8> for SwitchRailsState {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Ok(match value {
+            1 => SwitchRailsState::Direct,
+            2 => SwitchRailsState::Diverted,
+            _ => return Err(Error::UnknownSwitchRailsState(value)),
+        })
+    }
+}
+
+impl From<SwitchRailsState> for u8 {
+    fn from(item: SwitchRailsState) -> Self {
+        match item {
+            SwitchRailsState::Direct => 1,
+            SwitchRailsState::Diverted => 2,
+        }
+    }
+}
+
+impl fmt::Display for SwitchRailsState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let id = match *self {
+            SwitchRailsState::Direct => "Direct",
+            SwitchRailsState::Diverted => "Diverted",
+        };
+        write!(f, "{}", id)
+    }
+}
+
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Direction {
@@ -185,12 +324,19 @@ pub struct ControlLoco {
     pub speed: Speed,
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
+pub struct DriveSwitchRails {
+    pub actuator_id: ActuatorId,
+    pub state: SwitchRailsState,
+}
+
 #[derive(Encode, Decode, Copy, Clone, Debug)]
 pub enum Operation {
     Connect,
     ControlLoco,
     LocoStatus,
     SensorsStatus,
+    DriveActuator,
 }
 
 impl TryFrom<u8> for Operation {
@@ -202,6 +348,7 @@ impl TryFrom<u8> for Operation {
             2 => Operation::ControlLoco,
             3 => Operation::LocoStatus,
             4 => Operation::SensorsStatus,
+            5 => Operation::DriveActuator,
             _ => return Err(Error::UnknownOperation(value)),
         })
     }
@@ -214,6 +361,7 @@ impl From<Operation> for u8 {
             Operation::ControlLoco => 2,
             Operation::LocoStatus => 3,
             Operation::SensorsStatus => 4,
+            Operation::DriveActuator => 5,
         }
     }
 }
@@ -225,6 +373,7 @@ impl fmt::Display for Operation {
             Operation::ControlLoco => "ControlLoco",
             Operation::LocoStatus => "LocoStatus",
             Operation::SensorsStatus => "SensorsStatus",
+            Operation::DriveActuator => "DriveActuator",
         };
         write!(f, "{}", op)
     }
@@ -256,6 +405,13 @@ pub struct SensorStatus {
 pub struct LocoStatusResponse {
     pub direction: u8,
     pub speed: u8,
+}
+
+#[derive(Encode, Decode, Copy, Clone, Debug)]
+pub struct DriveActuatorPayload {
+    pub actuator_id: u8,
+    pub actuator_type: u8,
+    pub actuator_state: u8,
 }
 
 #[derive(Encode, Decode, Copy, Clone, Debug)]

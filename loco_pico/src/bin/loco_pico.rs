@@ -331,7 +331,7 @@ impl<'a> Loco<'a> {
             let send_response = match op {
                 Operation::ControlLoco => self.handle_op_control_loco(payload)?,
                 Operation::LocoStatus => self.handle_op_loco_status(payload)?,
-                Operation::Connect | Operation::SensorsStatus => {
+                Operation::Connect | Operation::SensorsStatus | Operation::DriveActuator => {
                     return Err(Error::UnsupportedOperation(op));
                 }
             };

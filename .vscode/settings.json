@@ -1,5 +1,6 @@
 {
     "rust-analyzer.linkedProjects": [
+		"actuators_pico/Cargo.toml",
 		"loco_controller/Cargo.toml",
 		"loco_pico/Cargo.toml",
 		"loco_protocol/Cargo.toml",

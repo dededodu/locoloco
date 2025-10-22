@@ -1,3 +1,5 @@
+actuators_pico/Cargo.lock
+actuators_pico/target
 loco_controller/Cargo.lock
 loco_controller/target
 loco_pico/Cargo.lock
