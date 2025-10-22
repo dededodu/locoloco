@@ -201,6 +201,7 @@ impl TryFrom<u8> for Operation {
             1 => Operation::Connect,
             2 => Operation::ControlLoco,
             3 => Operation::LocoStatus,
+            4 => Operation::SensorsStatus,
             _ => return Err(Error::UnknownOperation(value)),
         })
     }
