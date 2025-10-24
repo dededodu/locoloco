@@ -59,7 +59,7 @@ work.
 
 Go to the official
 [website](https://www.raspberrypi.com/software/operating-systems/) to download
-the __Rasberry Pi OS (64-bit)__ version which is compatible with the Pi Zero 2W.
+the __Raspberry Pi OS (64-bit)__ version which is compatible with the Pi Zero 2W.
 
 #### Flash the image
 
@@ -209,7 +209,7 @@ requirements.
 ### Sensors Pico
 
 This is the code running on the Pi Pico 2 W attached to all RFID readers. These
-readers act as waypoints to locate locos and report these information to the
+readers act as checkpoints to locate locos and report these information to the
 `loco_controller`. The program connects to the `loco_controller` and reports
 periodically the updated locations if any. Then, it's up to the
 `loco_controller` to decide what to do with these information. The location is
