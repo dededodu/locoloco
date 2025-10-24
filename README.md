@@ -44,6 +44,121 @@ Run the controller as follows:
     --backend-actuators-port 8006 \
 ```
 
+### Prepare the board
+
+We are using a Raspberry Pi Zero 2W to act as the controller board for this
+project, but obviously any computer that can act as a WiFi access point would
+work.
+
+#### Download Raspberry Pi OS
+
+Go to the official
+[website](https://www.raspberrypi.com/software/operating-systems/) to download
+the __Rasberry Pi OS (64-bit)__ version which is compatible with the Pi Zero 2W.
+
+#### Flash the image
+
+Download and install the __Raspberry Pi Imager__ tool in order to flash the OS
+image to a microSD card.
+
+#### Configure as WiFi access point
+
+Insert the microSD into the Raspberry Pi Zero 2W, plug a USB Ethernet adapter,
+and plug the power to boot.
+
+From another computer, SSH into the Pi to configure it as WiFi access point.
+
+_Update system with latest packages_
+
+```
+sudo apt update
+sudo apt upgrade
+sudo reboot
+```
+
+_Install a file editor (ViM)_
+
+```
+sudo apt install vim
+```
+
+_Configure Network Manager_
+
+```
+sudo nmcli device wifi hotspot ssid loco-controller password locoloco autoconnect yes
+```
+
+_Check Network Manager configuration_
+
+```
+sudo vim /etc/NetworkManager/system-connections/Hotspot.nmconnection
+sudo vim /etc/NetworkManager/NetworkManager.conf
+sudo vim /etc/NetworkManager/system-connections/preconfigured.nmconnection
+```
+
+_Restart Network Manager_
+
+```
+sudo systemctl restart NetworkManager
+```
+
+_Restart the board_
+
+```
+sudo reboot
+```
+
+At this point the Pi should be exposing its `wlan0` interface as an access
+point.
+
+#### Setup `locoloco` service
+
+We must ensure `loco_controller` will be started during the board's startup.
+
+Creating a service is the right way to delegate this task to `systemd`, which
+will make sure to restart the program if it terminates for any reason.
+
+_Create `loco_controller`'s directory_
+
+```
+mkdir -p /home/locoloco/controller
+```
+
+Assuming we have built `loco_controller` binary (see [instructions](#build)),
+and assuming it is available from the board at
+`/home/locoloco/controller/loco_controller` path, we can create the `locoloco`
+service.
+
+_Create `locoloco` service_
+
+```
+sudo cat > /lib/systemd/system/locoloco.service<< EOF
+[Unit]
+Description=LocoLoco service
+After=multi-user.target
+
+[Service]
+Type=idle
+Environment="RUST_LOG=debug"
+ExecStart=/home/locoloco/controller/loco_controller
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo chmod 644 /lib/systemd/system/locoloco.service
+sudo systemctl daemon-reload
+sudo systemctl enable locoloco.service
+sudo reboot                              
+```
+
+_Check `locoloco` service is running_
+
+```
+sudo systemctl status locoloco.service
+journalctl -f -u locoloco.service -b
+```
+
 ### HTTP requests
 
 Use `cURL` for sending requests to the HTTP server.
