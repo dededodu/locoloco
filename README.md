@@ -2,6 +2,11 @@
 
 A repository gathering all tools for fully controlling model train through a Web browser interface.
 
+- [Pre-requisites](#pre-requisites)
+- [Loco Controller](#loco-controller)
+- [Pico Programs](#pico-programs)
+- [Railway Network](#railway-network)
+
 ## Pre-requisites
 
 Both `rustup` and `cargo` should be installed on your machine.
