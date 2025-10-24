@@ -32,6 +32,28 @@ sudo cp udev_rules/99-rp-pico2w.rules /etc/udev/rules.d/
 
 ## Loco Controller
 
+This is the code running on the main controller (Pi Zero 2W board), responsible
+for orchestrating the rail network, gathering data from the sensors, and driving
+locos and actuators based on the intended behavior for every loco.
+
+The `Oracle` is the component of the `loco_controller` responsible of the
+network's orchestration.
+
+### Operational modes
+
+#### Manual mode
+
+`loco_controller` can run in __manual__ mode so that locos and actuators can be
+driven directly from HTTP requests. The __Oracle__ is disabled in this mode.
+
+#### Auto mode
+
+`loco_controller` can also run in __auto__ mode, which means the program takes
+full control of the rail network, driving locos in an automated way so they
+never run into each other, and so they can evolve towards their intented
+targets. In this mode, HTTP requests for directly controlling locos and
+actuators are prohibited. The __Oracle__ is enabled in this mode.
+
 ### Build
 
 ```
@@ -196,6 +218,38 @@ curl -X POST http://localhost:8080/drive_switch_rails \
     -d '{"actuator_id":"switchrails1", "state": "direct"}'
 ```
 
+#### Toggle oracle mode
+
+__Disabling oracle__
+```
+curl -X POST http://localhost:8080/oracle_mode \
+    -H 'Content-Type: application/json' \
+    -d '{"off":null}'
+```
+
+__Enabling oracle__
+```
+curl -X POST http://localhost:8080/oracle_mode \
+    -H 'Content-Type: application/json' \
+    -d '{"auto":null}'
+```
+
+#### Setup loco intent
+
+__Drive along a track__
+```
+curl -X POST http://localhost:8080/loco_intent \
+    -H 'Content-Type: application/json' \
+    -d '{"loco_id":"loco1", "loco_intent":{"drive":["forward","track1"]}}'
+```
+
+__Stop at a checkpoint__
+```
+curl -X POST http://localhost:8080/loco_intent \
+    -H 'Content-Type: application/json' \
+    -d '{"loco_id":"loco1", "loco_intent":{"stop":["forward","checkpoint1"]}}'
+```
+
 ## Pico programs
 
 ### Loco Pico
@@ -204,7 +258,7 @@ This is the code running on the Pi Pico 2 W embedded in every loco. It registers
 itself to the `loco_controller` so that later on it can receive some requests
 coming from the `loco_controller`. A request can be the result of an HTTP
 request being forwarded all the way to the loco, or simply due to some internal
-requirements.
+requirements (i.e `loco_controller`'s [auto mode](#auto-mode)).
 
 ### Sensors Pico
 
@@ -221,7 +275,7 @@ This is the code running on the Pi Pico 2 W connected to all switch rails. It
 registers itself to the `loco_controller` so that later on it can receive some
 requests coming from the `loco_controller`. A request can be the result of an
 HTTP request being forwarded all the way to the actuators, or simply due to
-some internal requirements.
+some internal requirements (i.e `loco_controller`'s [auto mode](#auto-mode)).
 
 ### Build
 

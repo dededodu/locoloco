@@ -22,7 +22,7 @@ pub enum Error {
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum LocoId {
     Loco1,
@@ -81,6 +81,11 @@ pub enum SensorId {
     RfidReader1,
     RfidReader2,
     RfidReader3,
+    RfidReader4,
+    RfidReader5,
+    RfidReader6,
+    RfidReader7,
+    RfidReader8,
 }
 
 impl TryFrom<u8> for SensorId {
@@ -91,6 +96,11 @@ impl TryFrom<u8> for SensorId {
             1 => SensorId::RfidReader1,
             2 => SensorId::RfidReader2,
             3 => SensorId::RfidReader3,
+            4 => SensorId::RfidReader4,
+            5 => SensorId::RfidReader5,
+            6 => SensorId::RfidReader6,
+            7 => SensorId::RfidReader7,
+            8 => SensorId::RfidReader8,
             _ => return Err(Error::UnknownSensorId(value)),
         })
     }
@@ -102,6 +112,11 @@ impl From<SensorId> for u8 {
             SensorId::RfidReader1 => 1,
             SensorId::RfidReader2 => 2,
             SensorId::RfidReader3 => 3,
+            SensorId::RfidReader4 => 4,
+            SensorId::RfidReader5 => 5,
+            SensorId::RfidReader6 => 6,
+            SensorId::RfidReader7 => 7,
+            SensorId::RfidReader8 => 8,
         }
     }
 }
@@ -112,6 +127,11 @@ impl fmt::Display for SensorId {
             SensorId::RfidReader1 => "Checkpoint1",
             SensorId::RfidReader2 => "Checkpoint2",
             SensorId::RfidReader3 => "Checkpoint3",
+            SensorId::RfidReader4 => "Checkpoint4",
+            SensorId::RfidReader5 => "Checkpoint5",
+            SensorId::RfidReader6 => "Checkpoint6",
+            SensorId::RfidReader7 => "Checkpoint7",
+            SensorId::RfidReader8 => "Checkpoint8",
         };
         write!(f, "{}", id)
     }
@@ -253,7 +273,7 @@ impl fmt::Display for SwitchRailsState {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum Direction {
     #[default]
@@ -282,7 +302,7 @@ impl From<Direction> for u8 {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Speed {
     #[default]
@@ -328,6 +348,13 @@ pub struct ControlLoco {
 pub struct DriveSwitchRails {
     pub actuator_id: ActuatorId,
     pub state: SwitchRailsState,
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum OracleMode {
+    Off,
+    Auto,
 }
 
 #[derive(Encode, Decode, Copy, Clone, Debug)]
@@ -419,11 +446,4 @@ pub struct Header {
     pub magic: u8,
     pub operation: u8,
     pub payload_len: u8,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct LocoStatus {
-    pub direction: Direction,
-    pub speed: Speed,
-    pub location: Option<SensorId>,
 }
