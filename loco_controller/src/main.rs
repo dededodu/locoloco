@@ -18,7 +18,8 @@ use std::{
     io::{self, Write},
     net::{TcpListener, TcpStream},
     sync::{Arc, Mutex},
-    thread,
+    thread::{self, sleep},
+    time::Duration,
 };
 use thiserror::Error;
 
@@ -49,6 +50,102 @@ enum Error {
 }
 
 type Result<T> = std::result::Result<T, Error>;
+
+enum SegmentPriority {
+    Priority0,
+    Priority1,
+    Priority2,
+}
+
+enum TrackId {
+    Track1,
+    Track2,
+}
+
+enum CheckpointId {
+    Checkpoint1,
+    Checkpoint2,
+    Checkpoint3,
+    Checkpoint4,
+    Checkpoint5,
+    Checkpoint6,
+    Station1,
+    Station2,
+}
+
+impl Into<SensorId> for CheckpointId {
+    fn into(self) -> SensorId {
+        match self {
+            CheckpointId::Checkpoint1 => SensorId::RfidReader1,
+            CheckpointId::Checkpoint2 => SensorId::RfidReader2,
+            CheckpointId::Checkpoint3 => SensorId::RfidReader3,
+            CheckpointId::Checkpoint4 => SensorId::RfidReader4,
+            CheckpointId::Checkpoint5 => SensorId::RfidReader5,
+            CheckpointId::Checkpoint6 => SensorId::RfidReader6,
+            CheckpointId::Station1 => SensorId::RfidReader7,
+            CheckpointId::Station2 => SensorId::RfidReader8,
+        }
+    }
+}
+
+enum LocoIntent {
+    Drive(TrackId),
+    Stop(CheckpointId),
+}
+
+enum SegmentId {
+    Segment1,
+    Segment2,
+    Segment3,
+    Segment4,
+    Segment5,
+    Segment6,
+    Segment7,
+    Segment8,
+    Segment9,
+    Segment10,
+}
+
+struct Segment {
+    id: SegmentId,
+    priority: SegmentPriority,
+}
+
+struct NextSegment {
+    segment: Segment,
+    loco: LocoId,
+}
+
+struct Oracle {
+    backend: Arc<Backend>,
+}
+
+impl Oracle {
+    fn new(backend: Arc<Backend>) -> Self {
+        debug!("Oracle::new()");
+        Oracle { backend }
+    }
+
+    fn process(&mut self) -> Result<()> {
+        let mut busy_segments: Vec<Segment> = Vec::new();
+        let mut next_segments: Vec<Segment> = Vec::new();
+        // For every loco:
+        //  - Identify where it's located on the network
+        //  - What is the loco doing (speed & direction)
+        //  - Determine current/busy segment (Option<Segment>)
+        //  - Based on loco's intent, determine next segment (Option<Segment>)
+        for (loco_id, loco_info) in self.backend.loco_info.iter() {}
+
+        // For every next segment (based on priority):
+        //  - Check if next segment is busy:
+        //  - If it is, discard this next segment and move to next segment
+        //  - If it is free, add this loco to the list of controls to apply
+
+        // For every control in the list:
+        //  - Apply it
+        Ok(())
+    }
+}
 
 #[derive(Default)]
 struct LocoInfo {
@@ -442,6 +539,17 @@ fn backend_actuators(port: u16, backend: Arc<Backend>) -> Result<()> {
     }
 }
 
+fn backend_oracle(backend: Arc<Backend>) -> Result<()> {
+    debug!("backend_oracle()");
+    let mut oracle = Oracle::new(backend);
+    loop {
+        if let Err(e) = oracle.process() {
+            error!("{}", e);
+        }
+        sleep(Duration::from_millis(10));
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -465,6 +573,7 @@ fn main() -> Result<()> {
     let shared_backend_locos = backend.clone();
     let shared_backend_sensors = backend.clone();
     let shared_backend_actuators = backend.clone();
+    let shared_backend_oracle = backend.clone();
 
     // Start backend server, waiting for incoming connections from locos
     thread::spawn(move || backend_locos(args.backend_locos_port, shared_backend_locos));
@@ -474,6 +583,9 @@ fn main() -> Result<()> {
 
     // Start backend server, waiting for incoming connection from actuators
     thread::spawn(move || backend_actuators(args.backend_actuators_port, shared_backend_actuators));
+
+    // Start railway network automation process
+    thread::spawn(move || backend_oracle(shared_backend_oracle));
 
     http_main(args.http_port, backend).map_err(Error::HttpServer)?;
 

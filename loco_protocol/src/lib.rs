@@ -81,6 +81,11 @@ pub enum SensorId {
     RfidReader1,
     RfidReader2,
     RfidReader3,
+    RfidReader4,
+    RfidReader5,
+    RfidReader6,
+    RfidReader7,
+    RfidReader8,
 }
 
 impl TryFrom<u8> for SensorId {
@@ -91,6 +96,11 @@ impl TryFrom<u8> for SensorId {
             1 => SensorId::RfidReader1,
             2 => SensorId::RfidReader2,
             3 => SensorId::RfidReader3,
+            4 => SensorId::RfidReader4,
+            5 => SensorId::RfidReader5,
+            6 => SensorId::RfidReader6,
+            7 => SensorId::RfidReader7,
+            8 => SensorId::RfidReader8,
             _ => return Err(Error::UnknownSensorId(value)),
         })
     }
@@ -102,6 +112,11 @@ impl From<SensorId> for u8 {
             SensorId::RfidReader1 => 1,
             SensorId::RfidReader2 => 2,
             SensorId::RfidReader3 => 3,
+            SensorId::RfidReader4 => 4,
+            SensorId::RfidReader5 => 5,
+            SensorId::RfidReader6 => 6,
+            SensorId::RfidReader7 => 7,
+            SensorId::RfidReader8 => 8,
         }
     }
 }
@@ -112,6 +127,11 @@ impl fmt::Display for SensorId {
             SensorId::RfidReader1 => "Checkpoint1",
             SensorId::RfidReader2 => "Checkpoint2",
             SensorId::RfidReader3 => "Checkpoint3",
+            SensorId::RfidReader4 => "Checkpoint4",
+            SensorId::RfidReader5 => "Checkpoint5",
+            SensorId::RfidReader6 => "Checkpoint6",
+            SensorId::RfidReader7 => "Checkpoint7",
+            SensorId::RfidReader8 => "Checkpoint8",
         };
         write!(f, "{}", id)
     }
