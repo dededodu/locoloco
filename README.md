@@ -126,3 +126,13 @@ and by running `screen` command:
 ```
 screen /dev/ttyACM0
 ```
+
+## Railway network
+
+Below is the representation of the railway network, which clearly identifies
+the location of switch rails, checkpoints and segments.
+
+![image](docs/rail_network.svg)
+
+Note a segment is the path between two consecutive checkpoints. There are 10
+segments on this network.
