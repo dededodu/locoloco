@@ -8,3 +8,4 @@ loco_protocol/Cargo.lock
 loco_protocol/target
 sensors_pico/Cargo.lock
 sensors_pico/target
+target
