@@ -215,6 +215,14 @@ periodically the updated locations if any. Then, it's up to the
 `loco_controller` to decide what to do with these information. The location is
 reported through the HTTP request `loco_status`.
 
+### Actuators Pico
+
+This is the code running on the Pi Pico 2 W connected to all switch rails. It
+registers itself to the `loco_controller` so that later on it can receive some
+requests coming from the `loco_controller`. A request can be the result of an
+HTTP request being forwarded all the way to the actuators, or simply due to
+some internal requirements.
+
 ### Build
 
 ```
