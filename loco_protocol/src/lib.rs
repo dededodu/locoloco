@@ -22,6 +22,8 @@ pub enum Error {
 
 pub type Result<T> = core::result::Result<T, Error>;
 
+pub const BACKEND_PROTOCOL_MAGIC_NUMBER: u8 = 0xab;
+
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum LocoId {
@@ -335,26 +337,6 @@ impl From<Speed> for u8 {
             Speed::Fast => 3,
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
-pub struct ControlLoco {
-    pub loco_id: LocoId,
-    pub direction: Direction,
-    pub speed: Speed,
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
-pub struct DriveSwitchRails {
-    pub actuator_id: ActuatorId,
-    pub state: SwitchRailsState,
-}
-
-#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
-#[serde(rename_all = "lowercase")]
-pub enum OracleMode {
-    Off,
-    Auto,
 }
 
 #[derive(Encode, Decode, Copy, Clone, Debug)]
