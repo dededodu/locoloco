@@ -233,7 +233,7 @@ impl Backend {
         )
         .map_err(Error::EncodeToVec)?;
 
-        let resp: LocoStatusResponse = {
+        let status = {
             let mut loco_info = self.loco_info(&loco_id).lock().unwrap();
 
             let stream = loco_info
@@ -245,15 +245,16 @@ impl Backend {
                 .write_all(message.as_slice())
                 .map_err(Error::WriteTcpStream)?;
 
-            decode_from_std_read(stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?
-        };
+            let resp: LocoStatusResponse =
+                decode_from_std_read(stream, self.bincode_cfg).map_err(Error::DecodeFromStream)?;
 
-        let status = LocoStatus {
-            direction: Direction::try_from(resp.direction)
-                .map_err(Error::ConvertLocoProtocolType)?,
-            speed: Speed::try_from(resp.speed).map_err(Error::ConvertLocoProtocolType)?,
-            location: self.loco_info(&loco_id).lock().unwrap().location,
-            intent: self.loco_info(&loco_id).lock().unwrap().intent,
+            LocoStatus {
+                direction: Direction::try_from(resp.direction)
+                    .map_err(Error::ConvertLocoProtocolType)?,
+                speed: Speed::try_from(resp.speed).map_err(Error::ConvertLocoProtocolType)?,
+                location: loco_info.location,
+                intent: loco_info.intent,
+            }
         };
 
         Ok(status)
