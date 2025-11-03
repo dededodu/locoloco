@@ -1,7 +1,7 @@
 #![no_std]
 
 use cyw43::{Control, JoinOptions};
-use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
+use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::{ConnectError, TcpSocket};
@@ -15,14 +15,18 @@ use embassy_rp::{Peri, bind_interrupts};
 use embassy_time::Timer;
 use rand::RngCore;
 use static_cell::StaticCell;
+use {defmt_rtt as _, panic_probe as _};
 
 /**
  * Constants related to the WiFi connection between the Pi Pico boards
  * and the main controller.
  */
-pub const WIFI_NETWORK: &str = "loco-controller";
-pub const WIFI_PASSWORD: &str = "locoloco";
-pub const SERVER_IP_ADDRESS: IpAddress = IpAddress::v4(10, 42, 0, 1);
+//pub const WIFI_NETWORK: &str = "loco-controller";
+pub const WIFI_NETWORK: &str = "Livebox-525C";
+//pub const WIFI_PASSWORD: &str = "locoloco";
+pub const WIFI_PASSWORD: &str = "z3AHJc6rTG3fNcJZbC";
+//pub const SERVER_IP_ADDRESS: IpAddress = IpAddress::v4(10, 42, 0, 1);
+pub const SERVER_IP_ADDRESS: IpAddress = IpAddress::v4(192, 168, 1, 26);
 pub const SERVER_TCP_PORT_LOCOS: u16 = 8004;
 pub const SERVER_TCP_PORT_SENSORS: u16 = 8005;
 pub const SERVER_TCP_PORT_ACTUATORS: u16 = 8006;
@@ -90,7 +94,7 @@ pub async fn initialize_wifi<'a, 'b>(
     let spi = PioSpi::new(
         &mut pio.common,
         pio.sm0,
-        DEFAULT_CLOCK_DIVIDER,
+        RM2_CLOCK_DIVIDER,
         pio.irq0,
         cs,
         dio,
@@ -105,7 +109,7 @@ pub async fn initialize_wifi<'a, 'b>(
 
     control.init(clm).await;
     control
-        .set_power_management(cyw43::PowerManagementMode::PowerSave)
+        .set_power_management(cyw43::PowerManagementMode::Performance)
         .await;
 
     let config = Config::dhcpv4(Default::default());
