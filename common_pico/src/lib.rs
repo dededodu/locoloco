@@ -1,7 +1,7 @@
 #![no_std]
 
 use cyw43::{Control, JoinOptions};
-use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
+use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::{ConnectError, TcpSocket};
@@ -90,7 +90,7 @@ pub async fn initialize_wifi<'a, 'b>(
     let spi = PioSpi::new(
         &mut pio.common,
         pio.sm0,
-        DEFAULT_CLOCK_DIVIDER,
+        RM2_CLOCK_DIVIDER,
         pio.irq0,
         cs,
         dio,
@@ -105,7 +105,7 @@ pub async fn initialize_wifi<'a, 'b>(
 
     control.init(clm).await;
     control
-        .set_power_management(cyw43::PowerManagementMode::PowerSave)
+        .set_power_management(cyw43::PowerManagementMode::Performance)
         .await;
 
     let config = Config::dhcpv4(Default::default());
