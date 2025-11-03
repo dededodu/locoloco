@@ -1,33 +1,21 @@
 #![no_std]
 #![no_main]
 
+use common_pico::{initialize_logger, initialize_program};
 use core::cell::RefCell;
 use embassy_executor::Spawner;
-use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
-use embassy_rp::peripherals::USB;
 use embassy_rp::spi::{self, Spi};
-use embassy_rp::usb::{Driver, InterruptHandler};
 use embassy_time::{Delay, Instant, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
 use mfrc522::comm::blocking::spi::SpiInterface;
 use mfrc522::{Mfrc522, RxGain, Uid};
 use {defmt_rtt as _, panic_probe as _};
 
-bind_interrupts!(struct Irqs {
-    USBCTRL_IRQ => InterruptHandler<USB>;
-});
-
-#[embassy_executor::task]
-async fn logger_task(driver: Driver<'static, USB>) {
-    embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
-    let driver = Driver::new(p.USB, Irqs);
-    spawner.spawn(logger_task(driver)).unwrap();
+    initialize_logger(&spawner, p.USB);
 
     let inner = p.SPI0;
     let clk = p.PIN_2;
@@ -56,12 +44,7 @@ async fn main(spawner: Spawner) {
     rfid_reader1.set_receive_timeout(1).unwrap();
     rfid_reader1.set_antenna_gain(RxGain::DB48).unwrap();
 
-    let mut counter = 0;
-    while counter < 5 {
-        counter += 1;
-        log::info!("Tick {}", counter);
-        Timer::after_secs(1).await;
-    }
+    initialize_program("DetectTagUid").await;
 
     loop {
         let start = Instant::now();

@@ -9,23 +9,15 @@ use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
 use bincode::encode_into_slice;
 use bincode::error::EncodeError;
 use common_pico::{
-    HEADER_SIZE, REQUEST_MAX_SIZE, SERVER_IP_ADDRESS, SERVER_TCP_PORT_SENSORS, WIFI_NETWORK,
-    WIFI_PASSWORD,
+    HEADER_SIZE, REQUEST_MAX_SIZE, SERVER_IP_ADDRESS, SERVER_TCP_PORT_SENSORS,
+    connect_loco_controller, initialize_logger, initialize_program, initialize_wifi,
 };
-use cyw43::JoinOptions;
-use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
-use embassy_net::{Config, IpEndpoint, StackResources};
-use embassy_rp::bind_interrupts;
-use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio::{Level, Output};
-use embassy_rp::peripherals::{DMA_CH0, PIO0};
-use embassy_rp::peripherals::{SPI0, USB};
-use embassy_rp::pio::{InterruptHandler as PioInterruptHandler, Pio};
+use embassy_rp::peripherals::SPI0;
 use embassy_rp::spi::{self, Blocking, Spi};
-use embassy_rp::usb::{Driver as UsbDriver, InterruptHandler as UsbInterruptHandler};
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time::{Delay, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
@@ -36,14 +28,7 @@ use loco_protocol::{
 };
 use mfrc522::comm::blocking::spi::{DummyDelay, SpiInterface};
 use mfrc522::{Initialized, Mfrc522, RxGain, Uid};
-use rand::RngCore;
-use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
-
-bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
-    USBCTRL_IRQ => UsbInterruptHandler<USB>;
-});
 
 struct RfidReader<'a> {
     mfrc522: Mfrc522<
@@ -65,23 +50,6 @@ struct SensorData {
 type SensorsData = [Option<SensorData>; 2];
 static SENSORS_DATA: Mutex<CriticalSectionRawMutex, RefCell<SensorsData>> =
     Mutex::new(RefCell::new([None, None]));
-
-#[embassy_executor::task]
-async fn logger_task(driver: UsbDriver<'static, USB>) {
-    embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
-}
-
-#[embassy_executor::task]
-async fn cyw43_task(
-    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>,
-) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'static>>) -> ! {
-    runner.run().await
-}
 
 #[embassy_executor::task]
 async fn tag_reader_task(
@@ -144,87 +112,18 @@ async fn tag_reader_task(
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
-    let usb_driver = UsbDriver::new(p.USB, Irqs);
-    unwrap!(spawner.spawn(logger_task(usb_driver)));
-    let mut rng = RoscRng;
-
-    let mut counter = 0;
-    while counter < 10 {
-        counter += 1;
-        log::debug!("Tick {}", counter);
-        Timer::after_secs(1).await;
-    }
-    log::info!("Hello SensorsPico!");
+    initialize_logger(&spawner, p.USB);
+    initialize_program("SensorsPico").await;
+    let (mut control, stack) = initialize_wifi(
+        &spawner, p.PIN_23, p.PIN_25, p.PIO0, p.PIN_24, p.PIN_29, p.DMA_CH0,
+    )
+    .await;
 
     unwrap!(spawner.spawn(tag_reader_task(
         Spi::new_blocking(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, spi::Config::default()),
         Output::new(p.PIN_0, Level::High),
         Output::new(p.PIN_1, Level::High),
     )));
-
-    let fw = include_bytes!("../../../cyw43-firmware/43439A0.bin");
-    let clm = include_bytes!("../../../cyw43-firmware/43439A0_clm.bin");
-
-    let pwr = Output::new(p.PIN_23, Level::Low);
-    let cs = Output::new(p.PIN_25, Level::High);
-    let mut pio = Pio::new(p.PIO0, Irqs);
-    let spi = PioSpi::new(
-        &mut pio.common,
-        pio.sm0,
-        DEFAULT_CLOCK_DIVIDER,
-        pio.irq0,
-        cs,
-        p.PIN_24,
-        p.PIN_29,
-        p.DMA_CH0,
-    );
-
-    static STATE: StaticCell<cyw43::State> = StaticCell::new();
-    let state = STATE.init(cyw43::State::new());
-    let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
-    unwrap!(spawner.spawn(cyw43_task(runner)));
-
-    control.init(clm).await;
-    control
-        .set_power_management(cyw43::PowerManagementMode::PowerSave)
-        .await;
-
-    let config = Config::dhcpv4(Default::default());
-
-    // Generate random seed
-    let seed = rng.next_u64();
-
-    // Init network stack
-    static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
-    let (stack, runner) = embassy_net::new(
-        net_device,
-        config,
-        RESOURCES.init(StackResources::new()),
-        seed,
-    );
-
-    unwrap!(spawner.spawn(net_task(runner)));
-
-    loop {
-        match control
-            .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
-            .await
-        {
-            Ok(_) => break,
-            Err(err) => {
-                log::error!("join failed with status={}", err.status);
-            }
-        }
-    }
-
-    // Wait for DHCP
-    log::info!("waiting for DHCP...");
-    while !stack.is_config_up() {
-        Timer::after_secs(1).await;
-    }
-    log::info!("DHCP is now up!");
-
-    // And now we can use it!
 
     let sensors = Sensors::new();
 
@@ -233,22 +132,25 @@ async fn main(spawner: Spawner) {
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
 
+    control.gpio_set(0, false).await;
+
     loop {
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-
-        control.gpio_set(0, false).await;
-
-        let remote_endpoint = IpEndpoint {
-            addr: SERVER_IP_ADDRESS,
-            port: SERVER_TCP_PORT_SENSORS,
+        let mut socket = match connect_loco_controller(
+            stack,
+            &mut rx_buffer,
+            &mut tx_buffer,
+            SERVER_IP_ADDRESS,
+            SERVER_TCP_PORT_SENSORS,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!("connection error: {:?}", e);
+                Timer::after_secs(1).await;
+                continue;
+            }
         };
-        log::info!("Connecting to {:?}...", remote_endpoint);
-        if let Err(e) = socket.connect(remote_endpoint).await {
-            log::warn!("connection error: {:?}", e);
-            Timer::after_secs(1).await;
-            continue;
-        }
-        log::info!("Connected to {:?}", socket.remote_endpoint());
 
         control.gpio_set(0, true).await;
 
@@ -258,6 +160,8 @@ async fn main(spawner: Spawner) {
             log::error!("{:?}", e);
             continue;
         }
+
+        control.gpio_set(0, false).await;
     }
 }
 
