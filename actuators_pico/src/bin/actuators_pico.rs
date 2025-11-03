@@ -5,12 +5,16 @@
 use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
 use bincode::decode_from_slice;
 use bincode::error::DecodeError;
+use common_pico::{
+    HEADER_SIZE, PAYLOAD_MAX_SIZE, SERVER_IP_ADDRESS, SERVER_TCP_PORT_ACTUATORS, WIFI_NETWORK,
+    WIFI_PASSWORD,
+};
 use cyw43::JoinOptions;
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
-use embassy_net::{Config, IpAddress, IpEndpoint, StackResources};
+use embassy_net::{Config, IpEndpoint, StackResources};
 use embassy_rp::bind_interrupts;
 use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio::{Level, Output};
@@ -20,8 +24,8 @@ use embassy_rp::usb::{Driver as UsbDriver, InterruptHandler as UsbInterruptHandl
 use embassy_time::Timer;
 use embedded_io_async::{Read, ReadExactError};
 use loco_protocol::{
-    ActuatorId, ActuatorType, DriveActuatorPayload, Error as LocoProtocolError, Header, Operation,
-    SwitchRailsState,
+    ActuatorId, ActuatorType, BACKEND_PROTOCOL_MAGIC_NUMBER, DriveActuatorPayload,
+    Error as LocoProtocolError, Header, Operation, SwitchRailsState,
 };
 use rand::RngCore;
 use static_cell::StaticCell;
@@ -31,11 +35,6 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
     USBCTRL_IRQ => UsbInterruptHandler<USB>;
 });
-
-const WIFI_NETWORK: &str = "loco-controller";
-const WIFI_PASSWORD: &str = "locoloco";
-const SERVER_IP_ADDRESS: IpAddress = IpAddress::v4(10, 42, 0, 1);
-const SERVER_TCP_PORT: u16 = 8006;
 
 #[embassy_executor::task]
 async fn logger_task(driver: UsbDriver<'static, USB>) {
@@ -178,7 +177,7 @@ async fn main(spawner: Spawner) {
 
         let remote_endpoint = IpEndpoint {
             addr: SERVER_IP_ADDRESS,
-            port: SERVER_TCP_PORT,
+            port: SERVER_TCP_PORT_ACTUATORS,
         };
         log::info!("Connecting to {:?}...", remote_endpoint);
         if let Err(e) = socket.connect(remote_endpoint).await {
@@ -208,10 +207,6 @@ pub enum Error {
 }
 
 type Result<T> = core::result::Result<T, Error>;
-
-const BACKEND_PROTOCOL_MAGIC_NUMBER: u8 = 0xab;
-const PAYLOAD_MAX_SIZE: usize = 256;
-const HEADER_SIZE: usize = 0x3;
 
 struct SwitchRails {
     gpio: Output<'static>,

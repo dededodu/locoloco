@@ -1,0 +1,7 @@
+[package]
+name = "common_pico"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns"] }

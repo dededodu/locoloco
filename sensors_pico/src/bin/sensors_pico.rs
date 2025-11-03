@@ -8,12 +8,16 @@ use core::num::TryFromIntError;
 use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
 use bincode::encode_into_slice;
 use bincode::error::EncodeError;
+use common_pico::{
+    HEADER_SIZE, REQUEST_MAX_SIZE, SERVER_IP_ADDRESS, SERVER_TCP_PORT_SENSORS, WIFI_NETWORK,
+    WIFI_PASSWORD,
+};
 use cyw43::JoinOptions;
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
-use embassy_net::{Config, IpAddress, IpEndpoint, StackResources};
+use embassy_net::{Config, IpEndpoint, StackResources};
 use embassy_rp::bind_interrupts;
 use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio::{Level, Output};
@@ -26,7 +30,10 @@ use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time::{Delay, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_io_async::Write as _;
-use loco_protocol::{Header, LocoId, Operation, SensorId, SensorStatus, SensorsStatusArray};
+use loco_protocol::{
+    BACKEND_PROTOCOL_MAGIC_NUMBER, Header, LocoId, Operation, SensorId, SensorStatus,
+    SensorsStatusArray,
+};
 use mfrc522::comm::blocking::spi::{DummyDelay, SpiInterface};
 use mfrc522::{Initialized, Mfrc522, RxGain, Uid};
 use rand::RngCore;
@@ -37,11 +44,6 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
     USBCTRL_IRQ => UsbInterruptHandler<USB>;
 });
-
-const WIFI_NETWORK: &str = "loco-controller";
-const WIFI_PASSWORD: &str = "locoloco";
-const SERVER_IP_ADDRESS: IpAddress = IpAddress::v4(10, 42, 0, 1);
-const SERVER_TCP_PORT: u16 = 8005;
 
 struct RfidReader<'a> {
     mfrc522: Mfrc522<
@@ -238,7 +240,7 @@ async fn main(spawner: Spawner) {
 
         let remote_endpoint = IpEndpoint {
             addr: SERVER_IP_ADDRESS,
-            port: SERVER_TCP_PORT,
+            port: SERVER_TCP_PORT_SENSORS,
         };
         log::info!("Connecting to {:?}...", remote_endpoint);
         if let Err(e) = socket.connect(remote_endpoint).await {
@@ -268,11 +270,6 @@ pub enum Error {
 }
 
 type Result<T> = core::result::Result<T, Error>;
-
-const BACKEND_PROTOCOL_MAGIC_NUMBER: u8 = 0xab;
-const PAYLOAD_MAX_SIZE: usize = 256;
-const HEADER_SIZE: usize = 0x3;
-const REQUEST_MAX_SIZE: usize = HEADER_SIZE + PAYLOAD_MAX_SIZE;
 
 struct Sensors {
     bincode_cfg: Configuration<LittleEndian, Fixint, NoLimit>,

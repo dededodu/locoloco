@@ -5,12 +5,16 @@
 use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{decode_from_slice, encode_into_slice};
+use common_pico::{
+    HEADER_SIZE, PAYLOAD_MAX_SIZE, REQUEST_MAX_SIZE, RESPONSE_MAX_SIZE, SERVER_IP_ADDRESS,
+    SERVER_TCP_PORT_LOCOS, WIFI_NETWORK, WIFI_PASSWORD,
+};
 use cyw43::JoinOptions;
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
-use embassy_net::{Config, IpAddress, IpEndpoint, StackResources};
+use embassy_net::{Config, IpEndpoint, StackResources};
 use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIN_0, PIO0, PWM_SLICE0};
@@ -22,8 +26,8 @@ use embassy_rp::{Peri, bind_interrupts};
 use embassy_time::Timer;
 use embedded_io_async::{Read, ReadExactError, Write as _};
 use loco_protocol::{
-    ConnectPayload, ControlLocoPayload, Direction, Error as LocoProtocolError, Header,
-    LocoStatusResponse, Operation, Speed,
+    BACKEND_PROTOCOL_MAGIC_NUMBER, ConnectPayload, ControlLocoPayload, Direction,
+    Error as LocoProtocolError, Header, LocoStatusResponse, Operation, Speed,
 };
 use rand::RngCore;
 use static_cell::StaticCell;
@@ -33,11 +37,6 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => PioInterruptHandler<PIO0>;
     USBCTRL_IRQ => UsbInterruptHandler<USB>;
 });
-
-const WIFI_NETWORK: &str = "loco-controller";
-const WIFI_PASSWORD: &str = "locoloco";
-const SERVER_IP_ADDRESS: IpAddress = IpAddress::v4(10, 42, 0, 1);
-const SERVER_TCP_PORT: u16 = 8004;
 
 #[embassy_executor::task]
 async fn logger_task(driver: UsbDriver<'static, USB>) {
@@ -155,7 +154,7 @@ async fn main(spawner: Spawner) {
 
         let remote_endpoint = IpEndpoint {
             addr: SERVER_IP_ADDRESS,
-            port: SERVER_TCP_PORT,
+            port: SERVER_TCP_PORT_LOCOS,
         };
         log::info!("Connecting to {:?}...", remote_endpoint);
         if let Err(e) = socket.connect(remote_endpoint).await {
@@ -201,11 +200,6 @@ pub enum Error {
 
 type Result<T> = core::result::Result<T, Error>;
 
-const BACKEND_PROTOCOL_MAGIC_NUMBER: u8 = 0xab;
-const PAYLOAD_MAX_SIZE: usize = 256;
-const HEADER_SIZE: usize = 0x3;
-const REQUEST_MAX_SIZE: usize = HEADER_SIZE + PAYLOAD_MAX_SIZE;
-const RESPONSE_MAX_SIZE: usize = 1024;
 const LOCO_ID: u8 = 0x1;
 
 struct Loco<'a> {
