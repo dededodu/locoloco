@@ -66,7 +66,7 @@ async fn loco_status(path: web::Path<LocoId>, data: web::Data<Arc<Backend>>) -> 
     match data.loco_status(loco_id) {
         Ok(status) => HttpResponse::Ok().json(status),
         Err(e) => {
-            error!("{}", e);
+            error!("loco_status(): {}", e);
             HttpResponse::with_body(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 BoxBody::new(format!("{}", e)),
@@ -82,7 +82,7 @@ async fn control_loco(
 ) -> impl Responder {
     if data.oracle_enabled() {
         let e = "Oracle is running, can't manually control the loco";
-        error!("{}", e);
+        error!("control_loco(): {}", e);
         return HttpResponse::with_body(
             StatusCode::INTERNAL_SERVER_ERROR,
             BoxBody::new(format!("{}", e)),
@@ -90,7 +90,7 @@ async fn control_loco(
     }
 
     if let Err(e) = data.control_loco(form.loco_id, form.direction, form.speed) {
-        error!("{}", e);
+        error!("control_loco(): {}", e);
         return HttpResponse::with_body(
             StatusCode::INTERNAL_SERVER_ERROR,
             BoxBody::new(format!("{}", e)),
@@ -122,7 +122,7 @@ async fn drive_switch_rails(
 ) -> impl Responder {
     if data.oracle_enabled() {
         let e = "Oracle is running, can't manually drive switch rails";
-        error!("{}", e);
+        error!("drive_switch_rails(): {}", e);
         return HttpResponse::with_body(
             StatusCode::INTERNAL_SERVER_ERROR,
             BoxBody::new(format!("{}", e)),
@@ -134,7 +134,7 @@ async fn drive_switch_rails(
         ActuatorType::SwitchRails,
         form.state.into(),
     ) {
-        error!("{}", e);
+        error!("drive_switch_rails(): {}", e);
         return HttpResponse::with_body(
             StatusCode::INTERNAL_SERVER_ERROR,
             BoxBody::new(format!("{}", e)),
@@ -179,7 +179,7 @@ fn backend_locos(port: u16, backend: Arc<Backend>) -> Result<()> {
             .map_err(Error::StreamSetReadTimeout)?;
         debug!("backend_locos(): Connected");
         if let Err(e) = backend.handle_loco_connection(stream) {
-            error!("{}", e);
+            error!("backend_locos(): {}", e);
         }
     }
 }
@@ -195,7 +195,7 @@ fn backend_sensors(port: u16, backend: Arc<Backend>) -> Result<()> {
             .map_err(Error::StreamSetReadTimeout)?;
         debug!("backend_sensors(): Connected");
         if let Err(e) = backend.serve_sensors(stream) {
-            error!("{}", e);
+            error!("backend_sensors(): {}", e);
         }
     }
 }
@@ -211,7 +211,7 @@ fn backend_actuators(port: u16, backend: Arc<Backend>) -> Result<()> {
             .map_err(Error::StreamSetReadTimeout)?;
         debug!("backend_actuators(): Connected");
         if let Err(e) = backend.handle_actuators_connection(stream) {
-            error!("{}", e);
+            error!("backend_actuators(): {}", e);
         }
     }
 }
@@ -221,7 +221,7 @@ fn backend_oracle(backend: Arc<Backend>) -> Result<()> {
     let mut oracle = Oracle::new(backend);
     loop {
         if let Err(e) = oracle.process() {
-            error!("{}", e);
+            error!("backend_oracle(): {}", e);
         }
         sleep(Duration::from_millis(10));
     }
