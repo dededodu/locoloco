@@ -19,7 +19,7 @@ use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::SPI0;
 use embassy_rp::spi::{self, Blocking, Spi};
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
-use embassy_time::{Delay, Timer};
+use embassy_time::{Delay, Instant, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_io_async::Write as _;
 use loco_protocol::{
@@ -188,8 +188,8 @@ impl Sensors {
         }
     }
 
-    fn build_sensors_status_payload(&self, payload: &mut [u8]) -> Result<Option<u8>> {
-        log::debug!("Sensors::build_sensors_status_payload()");
+    fn extend_payload_with_sensor_status_list(&self, payload: &mut [u8]) -> Result<(u8, u8)> {
+        log::debug!("Sensors::extend_payload_with_sensor_status_list()");
 
         let mut payload_offset: usize = size_of::<SensorsStatusArray>();
         let mut updated_sensors: u8 = 0;
@@ -212,10 +212,18 @@ impl Sensors {
             }
         });
 
-        if updated_sensors == 0 {
-            return Ok(None);
-        }
+        Ok((
+            updated_sensors,
+            u8::try_from(payload_offset).map_err(Error::PayloadSizeTooLarge)?,
+        ))
+    }
 
+    fn extend_payload_with_sensors_status_array(
+        &self,
+        payload: &mut [u8],
+        updated_sensors: u8,
+    ) -> Result<()> {
+        log::debug!("Sensors::extend_payload_with_sensors_status_array()");
         encode_into_slice(
             SensorsStatusArray {
                 len: updated_sensors,
@@ -225,9 +233,7 @@ impl Sensors {
         )
         .map_err(Error::EncodeIntoSlice)?;
 
-        Ok(Some(
-            u8::try_from(payload_offset).map_err(Error::PayloadSizeTooLarge)?,
-        ))
+        Ok(())
     }
 
     async fn send_sensors_status_op(
@@ -264,15 +270,30 @@ impl Sensors {
     pub async fn handle_sensors_updates(&self, socket: &mut TcpSocket<'_>) -> Result<()> {
         log::debug!("Sensors::handle_sensors_updates()");
 
+        let mut message = [0u8; REQUEST_MAX_SIZE];
+        let payload_offset = HEADER_SIZE;
+        let mut now = Instant::now();
+
         loop {
-            let mut message = [0u8; REQUEST_MAX_SIZE];
-            // Check sensors which need to be updated and return payload
-            if let Some(payload_len) =
-                self.build_sensors_status_payload(&mut message[HEADER_SIZE..])?
-            {
+            // Check sensors which need to be updated and fill payload
+            let (updated_sensors, payload_len) =
+                self.extend_payload_with_sensor_status_list(&mut message[payload_offset..])?;
+
+            // Communicate with the loco_controller every second, even if no
+            // sensor was updated. This maintains the connection alive at a
+            // very minimal cost.
+            if updated_sensors > 0 || now.elapsed().as_millis() > 1000 {
+                self.extend_payload_with_sensors_status_array(
+                    &mut message[payload_offset..],
+                    updated_sensors,
+                )?;
+
                 // Send update to the loco_controller server
                 self.send_sensors_status_op(socket, &mut message, payload_len)
                     .await?;
+
+                // Update timer
+                now = Instant::now();
             }
 
             Timer::after_millis(100).await;
