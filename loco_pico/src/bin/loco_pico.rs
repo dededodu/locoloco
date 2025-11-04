@@ -269,10 +269,13 @@ impl PwmController<'_> {
     ) -> Result<Self> {
         // If we aim for a specific frequency, here is how we can calculate the top value.
         // The top value sets the period of the PWM cycle, so a counter goes from 0 to top and then wraps around to 0.
-        // Every such wraparound is one PWM cycle. So here is how we get 25KHz:
-        let desired_freq_hz = 25_000;
+        // Every such wraparound is one PWM cycle. So here is how we get 100Hz:
+        let desired_freq_hz = 100;
         let clock_freq_hz = embassy_rp::clocks::clk_sys_freq();
-        let divider = 16u8;
+        // Make sure the divider is large enough so that we can handle slow
+        // frequencies (such as 100Hz). This is required to ensure the period
+        // can be stored as a u16 (avoiding overflow).
+        let divider = 32u8;
         let period = (clock_freq_hz / (desired_freq_hz * divider as u32)) as u16 - 1;
 
         let mut cfg = PwmConfig::default();
