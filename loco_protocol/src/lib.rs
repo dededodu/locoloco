@@ -312,7 +312,12 @@ pub enum Speed {
     Slow,
     Normal,
     Fast,
+    PwmDutyCycle(u8),
 }
+
+const SPEED_PWM_RANGE: u8 = 100;
+const SPEED_PWM_IDX_L: u8 = 100;
+const SPEED_PWM_IDX_H: u8 = SPEED_PWM_IDX_L + SPEED_PWM_RANGE;
 
 impl TryFrom<u8> for Speed {
     type Error = Error;
@@ -323,6 +328,7 @@ impl TryFrom<u8> for Speed {
             1 => Speed::Slow,
             2 => Speed::Normal,
             3 => Speed::Fast,
+            SPEED_PWM_IDX_L..SPEED_PWM_IDX_H => Speed::PwmDutyCycle(value - SPEED_PWM_IDX_L),
             _ => return Err(Error::UnknownSpeed(value)),
         })
     }
@@ -335,6 +341,12 @@ impl From<Speed> for u8 {
             Speed::Slow => 1,
             Speed::Normal => 2,
             Speed::Fast => 3,
+            Speed::PwmDutyCycle(mut duty_percent) => {
+                if duty_percent > SPEED_PWM_RANGE {
+                    duty_percent = SPEED_PWM_RANGE;
+                }
+                duty_percent + SPEED_PWM_IDX_L
+            }
         }
     }
 }

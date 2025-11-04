@@ -305,6 +305,7 @@ impl PwmController<'_> {
             Speed::Slow => 25,
             Speed::Normal => 75,
             Speed::Fast => 100,
+            Speed::PwmDutyCycle(dc) => dc,
         };
 
         pwm_clear

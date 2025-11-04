@@ -204,10 +204,18 @@ curl -X GET http://localhost:8080/loco_status/loco1
 
 #### Control a loco
 
+__With a speed state__
 ```
 curl -X POST http://localhost:8080/control_loco \
     -H 'Content-Type: application/json' \
     -d '{"loco_id":"loco1", "direction": "forward", "speed": "fast"}'
+```
+
+__With a PWM duty cycle__
+```
+curl -X POST http://localhost:8080/control_loco \
+    -H 'Content-Type: application/json' \
+    -d '{"loco_id":"loco1", "direction": "backward", "speed": {"pwmdutycycle": 40}}'
 ```
 
 #### Drive a switch rails
