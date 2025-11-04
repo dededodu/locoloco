@@ -28,6 +28,8 @@ enum Error {
     BindListener(#[source] io::Error),
     #[error("Error running HTTP server {0}")]
     HttpServer(#[source] io::Error),
+    #[error("Error setting stream read timeout {0}")]
+    StreamSetReadTimeout(#[source] io::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -172,6 +174,9 @@ fn backend_locos(port: u16, backend: Arc<Backend>) -> Result<()> {
     loop {
         debug!("backend_locos(): Waiting for incoming connection...");
         let (stream, _) = listener.accept().map_err(Error::BindListener)?;
+        stream
+            .set_read_timeout(Some(Duration::new(1, 0)))
+            .map_err(Error::StreamSetReadTimeout)?;
         debug!("backend_locos(): Connected");
         if let Err(e) = backend.handle_loco_connection(stream) {
             error!("{}", e);
@@ -185,6 +190,9 @@ fn backend_sensors(port: u16, backend: Arc<Backend>) -> Result<()> {
     loop {
         debug!("backend_sensors(): Waiting for incoming connection...");
         let (stream, _) = listener.accept().map_err(Error::BindListener)?;
+        stream
+            .set_read_timeout(Some(Duration::new(2, 0)))
+            .map_err(Error::StreamSetReadTimeout)?;
         debug!("backend_sensors(): Connected");
         if let Err(e) = backend.serve_sensors(stream) {
             error!("{}", e);
@@ -198,6 +206,9 @@ fn backend_actuators(port: u16, backend: Arc<Backend>) -> Result<()> {
     loop {
         debug!("backend_actuators(): Waiting for incoming connection...");
         let (stream, _) = listener.accept().map_err(Error::BindListener)?;
+        stream
+            .set_read_timeout(Some(Duration::new(1, 0)))
+            .map_err(Error::StreamSetReadTimeout)?;
         debug!("backend_actuators(): Connected");
         if let Err(e) = backend.handle_actuators_connection(stream) {
             error!("{}", e);
