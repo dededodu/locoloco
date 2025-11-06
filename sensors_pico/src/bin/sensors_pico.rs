@@ -56,6 +56,12 @@ async fn tag_reader_task(
     spi: Spi<'static, SPI0, Blocking>,
     cs1: Output<'static>,
     cs2: Output<'static>,
+    cs3: Output<'static>,
+    cs4: Output<'static>,
+    cs5: Output<'static>,
+    cs6: Output<'static>,
+    cs7: Output<'static>,
+    cs8: Output<'static>,
 ) {
     let spi_rc = RefCell::new(spi);
     let mut readers = [
@@ -72,6 +78,48 @@ async fn tag_reader_task(
                 .expect("could not create reader 2"),
             sensor_id: SensorId::RfidReader2,
             sensor_data_idx: 1,
+        },
+        RfidReader {
+            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs3, Delay)))
+                .init()
+                .expect("could not create reader 3"),
+            sensor_id: SensorId::RfidReader3,
+            sensor_data_idx: 2,
+        },
+        RfidReader {
+            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs4, Delay)))
+                .init()
+                .expect("could not create reader 4"),
+            sensor_id: SensorId::RfidReader4,
+            sensor_data_idx: 3,
+        },
+        RfidReader {
+            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs5, Delay)))
+                .init()
+                .expect("could not create reader 5"),
+            sensor_id: SensorId::RfidReader5,
+            sensor_data_idx: 4,
+        },
+        RfidReader {
+            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs6, Delay)))
+                .init()
+                .expect("could not create reader 6"),
+            sensor_id: SensorId::RfidReader6,
+            sensor_data_idx: 5,
+        },
+        RfidReader {
+            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs7, Delay)))
+                .init()
+                .expect("could not create reader 7"),
+            sensor_id: SensorId::RfidReader7,
+            sensor_data_idx: 6,
+        },
+        RfidReader {
+            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs8, Delay)))
+                .init()
+                .expect("could not create reader 8"),
+            sensor_id: SensorId::RfidReader8,
+            sensor_data_idx: 7,
         },
     ];
 
@@ -121,8 +169,14 @@ async fn main(spawner: Spawner) {
 
     unwrap!(spawner.spawn(tag_reader_task(
         Spi::new_blocking(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, spi::Config::default()),
-        Output::new(p.PIN_0, Level::High),
-        Output::new(p.PIN_1, Level::High),
+        Output::new(p.PIN_6, Level::High),
+        Output::new(p.PIN_7, Level::High),
+        Output::new(p.PIN_8, Level::High),
+        Output::new(p.PIN_9, Level::High),
+        Output::new(p.PIN_18, Level::High),
+        Output::new(p.PIN_19, Level::High),
+        Output::new(p.PIN_20, Level::High),
+        Output::new(p.PIN_21, Level::High),
     )));
 
     let sensors = Sensors::new();
