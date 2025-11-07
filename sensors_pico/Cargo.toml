@@ -30,6 +30,7 @@ embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae
 embassy-usb-logger = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840" }
 embedded-hal-bus = { version = "0.1", features = ["async"] }
 embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
+heapless = "0.9.1"
 loco_protocol = { path = "../loco_protocol" }
 log = "0.4"
 mfrc522 = { git = "https://gitlab.com/dededodu/mfrc522.git", branch = "main" }

@@ -22,6 +22,7 @@ use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time::{Delay, Instant, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_io_async::Write as _;
+use heapless::Vec;
 use loco_protocol::{
     BACKEND_PROTOCOL_MAGIC_NUMBER, Header, LocoId, Operation, SensorId, SensorStatus,
     SensorsStatusArray,
@@ -54,78 +55,30 @@ static SENSORS_DATA: Mutex<CriticalSectionRawMutex, RefCell<SensorsData>> =
 #[embassy_executor::task]
 async fn tag_reader_task(
     spi: Spi<'static, SPI0, Blocking>,
-    cs1: Output<'static>,
-    cs2: Output<'static>,
-    cs3: Output<'static>,
-    cs4: Output<'static>,
-    cs5: Output<'static>,
-    cs6: Output<'static>,
-    cs7: Output<'static>,
-    cs8: Output<'static>,
+    sensors_data: [(Output<'static>, SensorId); 8],
 ) {
     let spi_rc = RefCell::new(spi);
-    let mut readers = [
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs1, Delay)))
-                .init()
-                .expect("could not create reader 1"),
-            sensor_id: SensorId::RfidReader1,
-            sensor_data_idx: 0,
-        },
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs2, Delay)))
-                .init()
-                .expect("could not create reader 2"),
-            sensor_id: SensorId::RfidReader2,
-            sensor_data_idx: 1,
-        },
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs3, Delay)))
-                .init()
-                .expect("could not create reader 3"),
-            sensor_id: SensorId::RfidReader3,
-            sensor_data_idx: 2,
-        },
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs4, Delay)))
-                .init()
-                .expect("could not create reader 4"),
-            sensor_id: SensorId::RfidReader4,
-            sensor_data_idx: 3,
-        },
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs5, Delay)))
-                .init()
-                .expect("could not create reader 5"),
-            sensor_id: SensorId::RfidReader5,
-            sensor_data_idx: 4,
-        },
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs6, Delay)))
-                .init()
-                .expect("could not create reader 6"),
-            sensor_id: SensorId::RfidReader6,
-            sensor_data_idx: 5,
-        },
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs7, Delay)))
-                .init()
-                .expect("could not create reader 7"),
-            sensor_id: SensorId::RfidReader7,
-            sensor_data_idx: 6,
-        },
-        RfidReader {
-            mfrc522: Mfrc522::new(SpiInterface::new(RefCellDevice::new(&spi_rc, cs8, Delay)))
-                .init()
-                .expect("could not create reader 8"),
-            sensor_id: SensorId::RfidReader8,
-            sensor_data_idx: 7,
-        },
-    ];
+    let mut readers: Vec<RfidReader, 8> = Vec::new();
+    let mut sensor_data_idx: usize = 0;
 
-    for reader in readers.iter_mut() {
-        reader.mfrc522.set_receive_timeout(1).unwrap();
-        reader.mfrc522.set_antenna_gain(RxGain::DB48).unwrap();
+    for (cs_pin, sensor_id) in sensors_data {
+        let mut mfrc522 = Mfrc522::new(SpiInterface::new(RefCellDevice::new(
+            &spi_rc, cs_pin, Delay,
+        )))
+        .init()
+        .expect("could not create reader");
+        mfrc522.set_receive_timeout(1).unwrap();
+        mfrc522.set_antenna_gain(RxGain::DB48).unwrap();
+
+        if let Err(reader) = readers.push(RfidReader {
+            mfrc522,
+            sensor_id,
+            sensor_data_idx,
+        }) {
+            log::error!("Readers vector is full, can't add {:?}", reader.sensor_id);
+        };
+
+        sensor_data_idx += 1;
     }
 
     loop {
@@ -169,14 +122,16 @@ async fn main(spawner: Spawner) {
 
     unwrap!(spawner.spawn(tag_reader_task(
         Spi::new_blocking(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, spi::Config::default()),
-        Output::new(p.PIN_6, Level::High),
-        Output::new(p.PIN_7, Level::High),
-        Output::new(p.PIN_8, Level::High),
-        Output::new(p.PIN_9, Level::High),
-        Output::new(p.PIN_18, Level::High),
-        Output::new(p.PIN_19, Level::High),
-        Output::new(p.PIN_20, Level::High),
-        Output::new(p.PIN_21, Level::High),
+        [
+            (Output::new(p.PIN_6, Level::High), SensorId::RfidReader1),
+            (Output::new(p.PIN_7, Level::High), SensorId::RfidReader2),
+            (Output::new(p.PIN_8, Level::High), SensorId::RfidReader3),
+            (Output::new(p.PIN_9, Level::High), SensorId::RfidReader4),
+            (Output::new(p.PIN_18, Level::High), SensorId::RfidReader5),
+            (Output::new(p.PIN_19, Level::High), SensorId::RfidReader6),
+            (Output::new(p.PIN_20, Level::High), SensorId::RfidReader7),
+            (Output::new(p.PIN_21, Level::High), SensorId::RfidReader8),
+        ],
     )));
 
     let sensors = Sensors::new();
