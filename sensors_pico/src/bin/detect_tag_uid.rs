@@ -22,7 +22,8 @@ async fn main(spawner: Spawner) {
     let mosi = p.PIN_3;
     let miso = p.PIN_4;
     let cs0 = Output::new(p.PIN_0, Level::High);
-    let cs1 = Output::new(p.PIN_1, Level::High);
+    let cs1 = Output::new(p.PIN_10, Level::High);
+    let cs2 = Output::new(p.PIN_18, Level::High);
 
     let mut config = spi::Config::default();
     config.frequency = 2_000_000;
@@ -31,18 +32,25 @@ async fn main(spawner: Spawner) {
     let spi_rc = RefCell::new(spi);
     let spi_dev0 = RefCellDevice::new(&spi_rc, cs0, Delay);
     let spi_dev1 = RefCellDevice::new(&spi_rc, cs1, Delay);
+    let spi_dev2 = RefCellDevice::new(&spi_rc, cs2, Delay);
     let spi_if0 = SpiInterface::new(spi_dev0);
     let spi_if1 = SpiInterface::new(spi_dev1);
+    let spi_if2 = SpiInterface::new(spi_dev2);
     let mut rfid_reader0 = Mfrc522::new(spi_if0)
         .init()
         .expect("could not create MFRC522");
     let mut rfid_reader1 = Mfrc522::new(spi_if1)
         .init()
         .expect("could not create MFRC522");
+    let mut rfid_reader2 = Mfrc522::new(spi_if2)
+        .init()
+        .expect("could not create MFRC522");
     rfid_reader0.set_receive_timeout(1).unwrap();
     rfid_reader0.set_antenna_gain(RxGain::DB48).unwrap();
     rfid_reader1.set_receive_timeout(1).unwrap();
     rfid_reader1.set_antenna_gain(RxGain::DB48).unwrap();
+    rfid_reader2.set_receive_timeout(1).unwrap();
+    rfid_reader2.set_antenna_gain(RxGain::DB48).unwrap();
 
     initialize_program("DetectTagUid").await;
 
@@ -118,6 +126,42 @@ async fn main(spawner: Spawner) {
             );
         }
         let _ = rfid_reader1.hlta();
+
+        let start = Instant::now();
+        log::info!("[reader2] WUPA waiting...");
+        if let Ok(atqa) = rfid_reader2.wupa() {
+            log::info!(
+                "[reader2] WUPA command took {} ms",
+                start.elapsed().as_millis()
+            );
+            let start = Instant::now();
+            match rfid_reader2.select(&atqa) {
+                Ok(Uid::Single(ref inner)) => {
+                    log::info!(
+                        "[reader2] Card UID {:?}, Type {:?}",
+                        inner.as_bytes(),
+                        inner.get_type()
+                    );
+                }
+                Ok(Uid::Double(ref inner)) => {
+                    log::info!("[reader2] Card double UID {:?}", inner.as_bytes());
+                }
+                Ok(_) => log::info!("[reader2] Got other UID size"),
+                Err(e) => {
+                    log::error!("[reader2] Error getting card UID: {:?}", e);
+                }
+            }
+            log::info!(
+                "[reader2] SELECT command took {} ms",
+                start.elapsed().as_millis()
+            );
+        } else {
+            log::info!(
+                "[reader2] WUPA command took {} ms",
+                start.elapsed().as_millis()
+            );
+        }
+        let _ = rfid_reader2.hlta();
 
         log::info!("sleep 10ms");
         Timer::after_millis(10).await;
