@@ -105,7 +105,7 @@ pub async fn initialize_wifi<'a, 'b>(
 
     control.init(clm).await;
     control
-        .set_power_management(cyw43::PowerManagementMode::Performance)
+        .set_power_management(cyw43::PowerManagementMode::None)
         .await;
 
     let config = Config::dhcpv4(Default::default());
