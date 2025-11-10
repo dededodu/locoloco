@@ -125,10 +125,10 @@ async fn main(spawner: Spawner) {
     unwrap!(spawner.spawn(tag_reader_task(
         Spi::new_blocking(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, spi::Config::default()),
         [
-            (Output::new(p.PIN_6, Level::High), SensorId::RfidReader1),
-            (Output::new(p.PIN_7, Level::High), SensorId::RfidReader2),
-            (Output::new(p.PIN_8, Level::High), SensorId::RfidReader3),
-            (Output::new(p.PIN_9, Level::High), SensorId::RfidReader4),
+            (Output::new(p.PIN_10, Level::High), SensorId::RfidReader1),
+            (Output::new(p.PIN_11, Level::High), SensorId::RfidReader2),
+            (Output::new(p.PIN_12, Level::High), SensorId::RfidReader3),
+            (Output::new(p.PIN_13, Level::High), SensorId::RfidReader4),
             (Output::new(p.PIN_18, Level::High), SensorId::RfidReader5),
             (Output::new(p.PIN_19, Level::High), SensorId::RfidReader6),
             (Output::new(p.PIN_20, Level::High), SensorId::RfidReader7),
