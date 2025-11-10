@@ -52,7 +52,7 @@ impl TryFrom<&[u8]> for LocoId {
         }
         Ok(match uid {
             [0xe3, 0xa6, 0xaf, 0x05] => LocoId::Loco1,
-            [0xf1, 0x65, 0xb2, 0x01] => LocoId::Loco2,
+            [0x69, 0xd0, 0x47, 0x06] => LocoId::Loco2,
             _ => return Err(Error::UnknownUid),
         })
     }
