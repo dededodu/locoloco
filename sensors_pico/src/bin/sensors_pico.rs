@@ -48,9 +48,11 @@ struct SensorData {
     sensor_id: SensorId,
 }
 
-type SensorsData = [Option<SensorData>; 2];
+type SensorsData = [Option<SensorData>; 8];
 static SENSORS_DATA: Mutex<CriticalSectionRawMutex, RefCell<SensorsData>> =
-    Mutex::new(RefCell::new([None, None]));
+    Mutex::new(RefCell::new([
+        None, None, None, None, None, None, None, None,
+    ]));
 
 #[embassy_executor::task]
 async fn tag_reader_task(
