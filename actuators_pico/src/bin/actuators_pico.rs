@@ -32,35 +32,35 @@ async fn main(spawner: Spawner) {
 
     let mut actuators = Actuators::new([
         SwitchRails {
-            gpio: Output::new(p.PIN_1, Level::Low),
+            gpio: Output::new(p.PIN_2, Level::Low),
             id: ActuatorId::SwitchRails1,
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_2, Level::Low),
+            gpio: Output::new(p.PIN_3, Level::Low),
             id: ActuatorId::SwitchRails2,
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_3, Level::Low),
+            gpio: Output::new(p.PIN_4, Level::Low),
             id: ActuatorId::SwitchRails3,
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_4, Level::Low),
+            gpio: Output::new(p.PIN_5, Level::Low),
             id: ActuatorId::SwitchRails4,
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_5, Level::Low),
+            gpio: Output::new(p.PIN_6, Level::Low),
             id: ActuatorId::SwitchRails5,
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_6, Level::Low),
+            gpio: Output::new(p.PIN_7, Level::Low),
             id: ActuatorId::SwitchRails6,
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_7, Level::Low),
+            gpio: Output::new(p.PIN_8, Level::Low),
             id: ActuatorId::SwitchRails7,
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_8, Level::Low),
+            gpio: Output::new(p.PIN_9, Level::Low),
             id: ActuatorId::SwitchRails8,
         },
     ]);
