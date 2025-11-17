@@ -13,7 +13,6 @@ use embassy_rp::pio::{InterruptHandler as PioInterruptHandler, Pio, PioPin};
 use embassy_rp::usb::{Driver as UsbDriver, InterruptHandler as UsbInterruptHandler};
 use embassy_rp::{Peri, bind_interrupts};
 use embassy_time::Timer;
-use rand::RngCore;
 use static_cell::StaticCell;
 
 /**
@@ -59,7 +58,7 @@ pub async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<
 
 pub fn initialize_logger(spawner: &Spawner, usb: Peri<'static, USB>) {
     let usb_driver = UsbDriver::new(usb, Irqs);
-    unwrap!(spawner.spawn(logger_task(usb_driver)));
+    spawner.spawn(unwrap!(logger_task(usb_driver)));
 }
 
 pub async fn initialize_program(program_name: &str) {
@@ -101,7 +100,7 @@ pub async fn initialize_wifi<'a, 'b>(
     static STATE: StaticCell<cyw43::State> = StaticCell::new();
     let state = STATE.init(cyw43::State::new());
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
-    unwrap!(spawner.spawn(cyw43_task(runner)));
+    spawner.spawn(unwrap!(cyw43_task(runner)));
 
     control.init(clm).await;
     control
@@ -123,7 +122,7 @@ pub async fn initialize_wifi<'a, 'b>(
         seed,
     );
 
-    unwrap!(spawner.spawn(net_task(runner)));
+    spawner.spawn(unwrap!(net_task(runner)));
 
     loop {
         match control

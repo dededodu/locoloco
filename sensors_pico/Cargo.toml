@@ -22,12 +22,12 @@ cortex-m-rt = "0.7.0"
 critical-section = "1.1"
 defmt = "0.3"
 defmt-rtt = "0.4"
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns"] }
-embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840", features = ["defmt", "defmt-timestamp-uptime"] }
-embassy-usb-logger = { git = "https://github.com/embassy-rs/embassy.git", rev = "6c6ae4f9fca1eaff6cb9f2896de333d9493ea840" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "9cd6c92151e4ee68bca95bfc17658e50ad2c1aca", features = ["arch-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
+embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "9cd6c92151e4ee68bca95bfc17658e50ad2c1aca", features = ["defmt", "tcp", "udp", "raw", "dhcpv4", "medium-ethernet", "dns"] }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "9cd6c92151e4ee68bca95bfc17658e50ad2c1aca", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "9cd6c92151e4ee68bca95bfc17658e50ad2c1aca" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "9cd6c92151e4ee68bca95bfc17658e50ad2c1aca", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-usb-logger = { git = "https://github.com/embassy-rs/embassy.git", rev = "9cd6c92151e4ee68bca95bfc17658e50ad2c1aca" }
 embedded-hal-bus = { version = "0.1", features = ["async"] }
 embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
 heapless = "0.9.1"

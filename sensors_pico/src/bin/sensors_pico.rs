@@ -122,7 +122,7 @@ async fn main(spawner: Spawner) {
     )
     .await;
 
-    unwrap!(spawner.spawn(tag_reader_task(
+    spawner.spawn(unwrap!(tag_reader_task(
         Spi::new_blocking(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, spi::Config::default()),
         [
             (Output::new(p.PIN_10, Level::High), SensorId::RfidReader1),

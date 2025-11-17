@@ -74,25 +74,25 @@ async fn main(spawner: Spawner) {
     .await;
 
     // Spawning one dedicated task per switch rails
-    unwrap!(spawner.spawn(switch_rail_controller(
+    spawner.spawn(unwrap!(switch_rail_controller(
         ActuatorId::SwitchRails1,
         CHANNEL1.receiver(),
         Output::new(p.PIN_2, Level::Low),
         Output::new(p.PIN_3, Level::Low)
     )));
-    unwrap!(spawner.spawn(switch_rail_controller(
+    spawner.spawn(unwrap!(switch_rail_controller(
         ActuatorId::SwitchRails2,
         CHANNEL2.receiver(),
         Output::new(p.PIN_4, Level::Low),
         Output::new(p.PIN_5, Level::Low)
     )));
-    unwrap!(spawner.spawn(switch_rail_controller(
+    spawner.spawn(unwrap!(switch_rail_controller(
         ActuatorId::SwitchRails3,
         CHANNEL3.receiver(),
         Output::new(p.PIN_6, Level::Low),
         Output::new(p.PIN_7, Level::Low)
     )));
-    unwrap!(spawner.spawn(switch_rail_controller(
+    spawner.spawn(unwrap!(switch_rail_controller(
         ActuatorId::SwitchRails4,
         CHANNEL4.receiver(),
         Output::new(p.PIN_8, Level::Low),
