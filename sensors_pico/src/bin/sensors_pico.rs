@@ -18,7 +18,7 @@ use embassy_net::tcp::TcpSocket;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::SPI0;
 use embassy_rp::spi::{self, Blocking, Spi};
-use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use embassy_time::{Delay, Instant, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_io_async::Write as _;
@@ -90,11 +90,10 @@ async fn tag_reader_task(
                     Ok(Uid::Single(ref uid)) => match LocoId::try_from(uid.as_bytes()) {
                         Ok(loco_id) => {
                             log::debug!("[{}] Detected {}", reader.sensor_id, loco_id);
-                            SENSORS_DATA.lock(|d| {
-                                d.borrow_mut()[reader.sensor_data_idx] = Some(SensorData {
-                                    loco_id,
-                                    sensor_id: reader.sensor_id,
-                                })
+                            let sensors_data = SENSORS_DATA.lock().await;
+                            sensors_data.borrow_mut()[reader.sensor_data_idx] = Some(SensorData {
+                                loco_id,
+                                sensor_id: reader.sensor_id,
                             });
                         }
                         Err(e) => log::error!("[{}] Invalid UID: {:?}", reader.sensor_id, e),
@@ -199,29 +198,28 @@ impl Sensors {
         }
     }
 
-    fn extend_payload_with_sensor_status_list(&self, payload: &mut [u8]) -> Result<(u8, u8)> {
+    async fn extend_payload_with_sensor_status_list(&self, payload: &mut [u8]) -> Result<(u8, u8)> {
         log::debug!("Sensors::extend_payload_with_sensor_status_list()");
 
         let mut payload_offset: usize = size_of::<SensorsStatusArray>();
         let mut updated_sensors: u8 = 0;
-        SENSORS_DATA.lock(|d| {
-            let mut sensors_data = d.borrow_mut();
-            for sensor_data in sensors_data.iter_mut() {
-                if let Some(d) = sensor_data.take() {
-                    log::info!("{} detected by reader {}", d.loco_id, d.sensor_id);
-                    payload_offset += encode_into_slice(
-                        SensorStatus {
-                            sensor_id: d.sensor_id.into(),
-                            loco_id: d.loco_id.into(),
-                        },
-                        &mut payload[payload_offset..],
-                        self.bincode_cfg,
-                    )
-                    .unwrap();
-                    updated_sensors += 1;
-                }
+
+        let sensors_data = SENSORS_DATA.lock().await;
+        for sensor_data in sensors_data.borrow_mut().iter_mut() {
+            if let Some(d) = sensor_data.take() {
+                log::info!("{} detected by reader {}", d.loco_id, d.sensor_id);
+                payload_offset += encode_into_slice(
+                    SensorStatus {
+                        sensor_id: d.sensor_id.into(),
+                        loco_id: d.loco_id.into(),
+                    },
+                    &mut payload[payload_offset..],
+                    self.bincode_cfg,
+                )
+                .map_err(Error::EncodeIntoSlice)?;
+                updated_sensors += 1;
             }
-        });
+        }
 
         Ok((
             updated_sensors,
@@ -287,8 +285,9 @@ impl Sensors {
 
         loop {
             // Check sensors which need to be updated and fill payload
-            let (updated_sensors, payload_len) =
-                self.extend_payload_with_sensor_status_list(&mut message[payload_offset..])?;
+            let (updated_sensors, payload_len) = self
+                .extend_payload_with_sensor_status_list(&mut message[payload_offset..])
+                .await?;
 
             // Communicate with the loco_controller every second, even if no
             // sensor was updated. This maintains the connection alive at a
