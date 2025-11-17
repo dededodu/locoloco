@@ -10,11 +10,12 @@ use common_pico::{
     connect_loco_controller, initialize_logger, initialize_program, initialize_wifi,
 };
 use defmt::unwrap;
-use embassy_executor::Spawner;
+use embassy_executor::{Executor, Spawner};
 use embassy_net::tcp::TcpSocket;
 use embassy_rp::gpio::{Level, Output};
+use embassy_rp::multicore::{Stack, spawn_core1};
 use embassy_sync::{
-    blocking_mutex::raw::ThreadModeRawMutex,
+    blocking_mutex::raw::CriticalSectionRawMutex,
     channel::{Channel, Receiver, Sender},
 };
 use embassy_time::Timer;
@@ -23,21 +24,25 @@ use loco_protocol::{
     ActuatorId, ActuatorType, BACKEND_PROTOCOL_MAGIC_NUMBER, DriveActuatorPayload,
     Error as LocoProtocolError, Header, Operation, SwitchRailsState,
 };
+use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+static mut CORE1_STACK: Stack<4096> = Stack::new();
+static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 
 /**
  * List of channels for dedicated communication between the main thread and
  * every switch_rail_controller tasks.
  */
-static CHANNEL1: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
-static CHANNEL2: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
-static CHANNEL3: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
-static CHANNEL4: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
+static CHANNEL1: Channel<CriticalSectionRawMutex, SwitchRailsState, 1> = Channel::new();
+static CHANNEL2: Channel<CriticalSectionRawMutex, SwitchRailsState, 1> = Channel::new();
+static CHANNEL3: Channel<CriticalSectionRawMutex, SwitchRailsState, 1> = Channel::new();
+static CHANNEL4: Channel<CriticalSectionRawMutex, SwitchRailsState, 1> = Channel::new();
 
 #[embassy_executor::task(pool_size = 4)]
 async fn switch_rail_controller(
     actuator_id: ActuatorId,
-    channel: Receiver<'static, ThreadModeRawMutex, SwitchRailsState, 1>,
+    channel: Receiver<'static, CriticalSectionRawMutex, SwitchRailsState, 1>,
     mut gpio_direct: Output<'static>,
     mut gpio_diverted: Output<'static>,
 ) {
@@ -73,31 +78,40 @@ async fn main(spawner: Spawner) {
     )
     .await;
 
-    // Spawning one dedicated task per switch rails
-    spawner.spawn(unwrap!(switch_rail_controller(
-        ActuatorId::SwitchRails1,
-        CHANNEL1.receiver(),
-        Output::new(p.PIN_2, Level::Low),
-        Output::new(p.PIN_3, Level::Low)
-    )));
-    spawner.spawn(unwrap!(switch_rail_controller(
-        ActuatorId::SwitchRails2,
-        CHANNEL2.receiver(),
-        Output::new(p.PIN_4, Level::Low),
-        Output::new(p.PIN_5, Level::Low)
-    )));
-    spawner.spawn(unwrap!(switch_rail_controller(
-        ActuatorId::SwitchRails3,
-        CHANNEL3.receiver(),
-        Output::new(p.PIN_6, Level::Low),
-        Output::new(p.PIN_7, Level::Low)
-    )));
-    spawner.spawn(unwrap!(switch_rail_controller(
-        ActuatorId::SwitchRails4,
-        CHANNEL4.receiver(),
-        Output::new(p.PIN_8, Level::Low),
-        Output::new(p.PIN_9, Level::Low)
-    )));
+    // Spawning one dedicated task per switch rails on core1
+    spawn_core1(
+        p.CORE1,
+        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
+        move || {
+            let executor1 = EXECUTOR1.init(Executor::new());
+            executor1.run(|spawner| {
+                spawner.spawn(unwrap!(switch_rail_controller(
+                    ActuatorId::SwitchRails1,
+                    CHANNEL1.receiver(),
+                    Output::new(p.PIN_2, Level::Low),
+                    Output::new(p.PIN_3, Level::Low)
+                )));
+                spawner.spawn(unwrap!(switch_rail_controller(
+                    ActuatorId::SwitchRails2,
+                    CHANNEL2.receiver(),
+                    Output::new(p.PIN_4, Level::Low),
+                    Output::new(p.PIN_5, Level::Low)
+                )));
+                spawner.spawn(unwrap!(switch_rail_controller(
+                    ActuatorId::SwitchRails3,
+                    CHANNEL3.receiver(),
+                    Output::new(p.PIN_6, Level::Low),
+                    Output::new(p.PIN_7, Level::Low)
+                )));
+                spawner.spawn(unwrap!(switch_rail_controller(
+                    ActuatorId::SwitchRails4,
+                    CHANNEL4.receiver(),
+                    Output::new(p.PIN_8, Level::Low),
+                    Output::new(p.PIN_9, Level::Low)
+                )));
+            });
+        },
+    );
 
     let mut actuators = Actuators::new([
         SwitchRails {
@@ -166,7 +180,7 @@ type Result<T> = core::result::Result<T, Error>;
 
 struct SwitchRails {
     id: ActuatorId,
-    channel: Sender<'static, ThreadModeRawMutex, SwitchRailsState, 1>,
+    channel: Sender<'static, CriticalSectionRawMutex, SwitchRailsState, 1>,
 }
 
 impl SwitchRails {
