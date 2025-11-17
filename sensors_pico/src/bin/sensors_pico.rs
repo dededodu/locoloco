@@ -13,9 +13,10 @@ use common_pico::{
     connect_loco_controller, initialize_logger, initialize_program, initialize_wifi,
 };
 use defmt::*;
-use embassy_executor::Spawner;
+use embassy_executor::{Executor, Spawner};
 use embassy_net::tcp::TcpSocket;
 use embassy_rp::gpio::{Level, Output};
+use embassy_rp::multicore::{Stack, spawn_core1};
 use embassy_rp::peripherals::SPI0;
 use embassy_rp::spi::{self, Blocking, Spi};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
@@ -29,7 +30,11 @@ use loco_protocol::{
 };
 use mfrc522::comm::blocking::spi::{DummyDelay, SpiInterface};
 use mfrc522::{Initialized, Mfrc522, RxGain, Uid};
+use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+static mut CORE1_STACK: Stack<4096> = Stack::new();
+static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 
 struct RfidReader<'a> {
     mfrc522: Mfrc522<
@@ -121,19 +126,28 @@ async fn main(spawner: Spawner) {
     )
     .await;
 
-    spawner.spawn(unwrap!(tag_reader_task(
-        Spi::new_blocking(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, spi::Config::default()),
-        [
-            (Output::new(p.PIN_10, Level::High), SensorId::RfidReader1),
-            (Output::new(p.PIN_11, Level::High), SensorId::RfidReader2),
-            (Output::new(p.PIN_12, Level::High), SensorId::RfidReader3),
-            (Output::new(p.PIN_13, Level::High), SensorId::RfidReader4),
-            (Output::new(p.PIN_18, Level::High), SensorId::RfidReader5),
-            (Output::new(p.PIN_19, Level::High), SensorId::RfidReader6),
-            (Output::new(p.PIN_20, Level::High), SensorId::RfidReader7),
-            (Output::new(p.PIN_21, Level::High), SensorId::RfidReader8),
-        ],
-    )));
+    spawn_core1(
+        p.CORE1,
+        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
+        move || {
+            let executor1 = EXECUTOR1.init(Executor::new());
+            executor1.run(|spawner| {
+                spawner.spawn(unwrap!(tag_reader_task(
+                    Spi::new_blocking(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, spi::Config::default()),
+                    [
+                        (Output::new(p.PIN_10, Level::High), SensorId::RfidReader1),
+                        (Output::new(p.PIN_11, Level::High), SensorId::RfidReader2),
+                        (Output::new(p.PIN_12, Level::High), SensorId::RfidReader3),
+                        (Output::new(p.PIN_13, Level::High), SensorId::RfidReader4),
+                        (Output::new(p.PIN_18, Level::High), SensorId::RfidReader5),
+                        (Output::new(p.PIN_19, Level::High), SensorId::RfidReader6),
+                        (Output::new(p.PIN_20, Level::High), SensorId::RfidReader7),
+                        (Output::new(p.PIN_21, Level::High), SensorId::RfidReader8),
+                    ],
+                )))
+            });
+        },
+    );
 
     let sensors = Sensors::new();
 

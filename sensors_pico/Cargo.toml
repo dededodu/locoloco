@@ -35,6 +35,7 @@ loco_protocol = { path = "../loco_protocol" }
 log = "0.4"
 mfrc522 = { git = "https://gitlab.com/dededodu/mfrc522.git", branch = "main" }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
+static_cell = "2.1"
 
 [profile.release]
 debug = 2
