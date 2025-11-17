@@ -9,9 +9,14 @@ use common_pico::{
     HEADER_SIZE, PAYLOAD_MAX_SIZE, SERVER_IP_ADDRESS, SERVER_TCP_PORT_ACTUATORS,
     connect_loco_controller, initialize_logger, initialize_program, initialize_wifi,
 };
+use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
 use embassy_rp::gpio::{Level, Output};
+use embassy_sync::{
+    blocking_mutex::raw::ThreadModeRawMutex,
+    channel::{Channel, Receiver, Sender},
+};
 use embassy_time::Timer;
 use embedded_io_async::{Read, ReadExactError};
 use loco_protocol::{
@@ -19,6 +24,44 @@ use loco_protocol::{
     Error as LocoProtocolError, Header, Operation, SwitchRailsState,
 };
 use {defmt_rtt as _, panic_probe as _};
+
+/**
+ * List of channels for dedicated communication between the main thread and
+ * every switch_rail_controller tasks.
+ */
+static CHANNEL1: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
+static CHANNEL2: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
+static CHANNEL3: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
+static CHANNEL4: Channel<ThreadModeRawMutex, SwitchRailsState, 1> = Channel::new();
+
+#[embassy_executor::task(pool_size = 4)]
+async fn switch_rail_controller(
+    actuator_id: ActuatorId,
+    channel: Receiver<'static, ThreadModeRawMutex, SwitchRailsState, 1>,
+    mut gpio_direct: Output<'static>,
+    mut gpio_diverted: Output<'static>,
+) {
+    log::debug!("switch_rails_controller(): actuator {}", actuator_id);
+
+    loop {
+        let switch_state = channel.receive().await;
+        let (gpio_set, gpio_clear) = match switch_state {
+            SwitchRailsState::Direct => (&mut gpio_direct, &mut gpio_diverted),
+            SwitchRailsState::Diverted => (&mut gpio_diverted, &mut gpio_direct),
+        };
+
+        log::debug!(
+            "switch_rails_controller(): driving {} to {}",
+            actuator_id,
+            switch_state
+        );
+
+        gpio_clear.set_level(Level::Low);
+        gpio_set.set_level(Level::High);
+        Timer::after_millis(500).await;
+        gpio_set.set_level(Level::Low);
+    }
+}
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -30,38 +73,48 @@ async fn main(spawner: Spawner) {
     )
     .await;
 
+    // Spawning one dedicated task per switch rails
+    unwrap!(spawner.spawn(switch_rail_controller(
+        ActuatorId::SwitchRails1,
+        CHANNEL1.receiver(),
+        Output::new(p.PIN_2, Level::Low),
+        Output::new(p.PIN_3, Level::Low)
+    )));
+    unwrap!(spawner.spawn(switch_rail_controller(
+        ActuatorId::SwitchRails2,
+        CHANNEL2.receiver(),
+        Output::new(p.PIN_4, Level::Low),
+        Output::new(p.PIN_5, Level::Low)
+    )));
+    unwrap!(spawner.spawn(switch_rail_controller(
+        ActuatorId::SwitchRails3,
+        CHANNEL3.receiver(),
+        Output::new(p.PIN_6, Level::Low),
+        Output::new(p.PIN_7, Level::Low)
+    )));
+    unwrap!(spawner.spawn(switch_rail_controller(
+        ActuatorId::SwitchRails4,
+        CHANNEL4.receiver(),
+        Output::new(p.PIN_8, Level::Low),
+        Output::new(p.PIN_9, Level::Low)
+    )));
+
     let mut actuators = Actuators::new([
         SwitchRails {
-            gpio: Output::new(p.PIN_2, Level::Low),
             id: ActuatorId::SwitchRails1,
+            channel: CHANNEL1.sender(),
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_3, Level::Low),
             id: ActuatorId::SwitchRails2,
+            channel: CHANNEL2.sender(),
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_4, Level::Low),
             id: ActuatorId::SwitchRails3,
+            channel: CHANNEL3.sender(),
         },
         SwitchRails {
-            gpio: Output::new(p.PIN_5, Level::Low),
             id: ActuatorId::SwitchRails4,
-        },
-        SwitchRails {
-            gpio: Output::new(p.PIN_6, Level::Low),
-            id: ActuatorId::SwitchRails5,
-        },
-        SwitchRails {
-            gpio: Output::new(p.PIN_7, Level::Low),
-            id: ActuatorId::SwitchRails6,
-        },
-        SwitchRails {
-            gpio: Output::new(p.PIN_8, Level::Low),
-            id: ActuatorId::SwitchRails7,
-        },
-        SwitchRails {
-            gpio: Output::new(p.PIN_9, Level::Low),
-            id: ActuatorId::SwitchRails8,
+            channel: CHANNEL4.sender(),
         },
     ]);
 
@@ -112,35 +165,26 @@ pub enum Error {
 type Result<T> = core::result::Result<T, Error>;
 
 struct SwitchRails {
-    gpio: Output<'static>,
     id: ActuatorId,
+    channel: Sender<'static, ThreadModeRawMutex, SwitchRailsState, 1>,
 }
 
 impl SwitchRails {
-    fn switch(&mut self, state: SwitchRailsState) -> Result<()> {
+    async fn switch(&mut self, state: SwitchRailsState) -> Result<()> {
         log::debug!("SwitchRails::switch()");
-        let level = match state {
-            SwitchRailsState::Direct => Level::Low,
-            SwitchRailsState::Diverted => Level::High,
-        };
-        log::info!(
-            "SwitchRails::switch(): Setting {} to {} ({:?})",
-            self.id,
-            state,
-            level
-        );
-        self.gpio.set_level(level);
+        self.channel.send(state).await;
+        log::info!("SwitchRails::switch(): Setting {} to {}", self.id, state,);
         Ok(())
     }
 }
 
 struct Actuators {
     bincode_cfg: Configuration<LittleEndian, Fixint, NoLimit>,
-    switch_rails: [SwitchRails; 8],
+    switch_rails: [SwitchRails; 4],
 }
 
 impl Actuators {
-    pub fn new(switch_rails: [SwitchRails; 8]) -> Self {
+    pub fn new(switch_rails: [SwitchRails; 4]) -> Self {
         log::debug!("Actuators::new()");
 
         Actuators {
@@ -149,11 +193,11 @@ impl Actuators {
         }
     }
 
-    fn update_switch_rails(&mut self, id: ActuatorId, state: SwitchRailsState) -> Result<()> {
+    async fn update_switch_rails(&mut self, id: ActuatorId, state: SwitchRailsState) -> Result<()> {
         log::debug!("Actuators::update_actuator()");
         for switch_rail in self.switch_rails.iter_mut() {
             if switch_rail.id == id {
-                switch_rail.switch(state)?;
+                switch_rail.switch(state).await?;
                 break;
             }
         }
@@ -161,7 +205,7 @@ impl Actuators {
         Ok(())
     }
 
-    fn handle_op_drive_actuator(&mut self, payload: &[u8]) -> Result<()> {
+    async fn handle_op_drive_actuator(&mut self, payload: &[u8]) -> Result<()> {
         log::debug!("Actuators::handle_op_drive_actuator()");
 
         let (drive_actuator_payload, _): (DriveActuatorPayload, usize) =
@@ -181,7 +225,7 @@ impl Actuators {
                     .actuator_state
                     .try_into()
                     .map_err(Error::ConvertLocoProtocolType)?;
-                self.update_switch_rails(actuator_id, state)?;
+                self.update_switch_rails(actuator_id, state).await?;
             }
         }
 
@@ -214,7 +258,7 @@ impl Actuators {
             }
 
             match op {
-                Operation::DriveActuator => self.handle_op_drive_actuator(payload)?,
+                Operation::DriveActuator => self.handle_op_drive_actuator(payload).await?,
                 Operation::Connect
                 | Operation::SensorsStatus
                 | Operation::ControlLoco
